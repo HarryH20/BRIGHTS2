@@ -7,3 +7,29 @@ services:
       - .:/app
     environment:
       - FLASK_ENV=development
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-brights}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-brights_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-brights_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-brights} -d ${POSTGRES_DB:-brights_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    env_file:
+      - .env
+
+volumes:
+  postgres_data:
