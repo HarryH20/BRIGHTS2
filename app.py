@@ -1,27 +1,30 @@
 import os
 from flask import Flask
 from dotenv import load_dotenv
+from models import db
 
 load_dotenv()
 
 app = Flask(__name__)
 
-# =============================================================================
-# SESSION SECURITY CONFIGURATION
-# =============================================================================
 app.config.update(
     SECRET_KEY=os.environ.get("FLASK_SECRET_KEY"),
     SESSION_COOKIE_SECURE=os.environ.get("FLASK_ENV")
     == "production",  # HTTPS only in prod
-    SESSION_COOKIE_HTTPONLY=True,  # No JavaScript access to session cookie
+    SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",  # CSRF protection
     PERMANENT_SESSION_LIFETIME=1800,  # 30 minute timeout
 )
 
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# =============================================================================
-# SECURITY HEADERS MIDDLEWARE
-# =============================================================================
+db.init_app(app)
+
+with app.app_context():
+    db.create_all()
+
+
 @app.after_request
 def set_security_headers(response):
     # Prevent MIME type sniffing
@@ -40,7 +43,6 @@ def set_security_headers(response):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
 
     # Content Security Policy - allows Dash/Plotly to function
-    # NOTE: May need adjustment if adding external resources (CDNs, fonts, etc.)
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
