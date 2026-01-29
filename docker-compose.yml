@@ -24,10 +24,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-brights}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-brights} -d ${POSTGRES_DB:-brights_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    env_file:
+      - .env
 
 volumes:
   postgres_data:
