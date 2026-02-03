@@ -1,10 +1,15 @@
 services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - web
+
   web:
     build: .
     ports:
       - "5000:5000"
-    volumes:
-      - .:/app
     environment:
       - FLASK_ENV=development
     env_file:
@@ -17,7 +22,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-brights}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-brights_dev_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-brights_db}
     ports:
       - "5432:5432"

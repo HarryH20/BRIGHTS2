@@ -1,39 +1,127 @@
 # BRIGHTS2
 
-Alright Welcome. This readme has certain assumptions that one
-know the basics of Git and Docker.
+A Flask + React web application with PostgreSQL database.
 
-The prerequisites include that you have Docker Desktop installed.
-It also assumes that you have git installed and have a github account.
+## Prerequisites
 
-First clone the repo. https://github.com/HarryH20/BRIGHTS2.git. This can be done in pycharm
-which is easiest or from the command line.
+- Docker Desktop installed and running
+- Git installed
+- GitHub account
 
-Checkout to the master branch and pull it. Create a new branch and name it after your first name.
-Again this can be done from the UI in pycharm or from the command line. Pull the master branch into your branch.
+## Quick Start
 
-Checkout into your branch.
+1. **Clone the repo**
+   ```bash
+   git clone https://github.com/HarryH20/BRIGHTS2.git
+   cd BRIGHTS2
+   ```
 
-Run **docker compose up --build** from the command line.
+2. **Create your environment file**
+   ```bash
+   cp .env.example .env
+   ```
+   Then generate a secret key and add it to `.env`:
+   ```bash
+   python3 -c "import secrets; print(secrets.token_hex(32))"
+   ```
 
-To stop the container run docker compose stop.
-To start run docker compose start.
+3. **Start all services**
+   ```bash
+   docker compose up --build -d
+   ```
 
-If you have any questions ask Harrison or better ask ChatGPT.
+4. **Access the app**
+   - Frontend (React): http://localhost:3000
+   - Backend API: http://localhost:5000
+   - Database: localhost:5432
 
+## Architecture
 
-## Running the Frontend (React)
-
-The React application lives in the `frontend/` directory.
-
-From the project root, run:
-
-```bash
-cd frontend
-npm install
-npm run dev
 ```
-Once the development server starts, open your browser and navigate to:
-**http://localhost:5173**
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│    Frontend     │────▶│     Backend     │────▶│    Database     │
+│  (React/Nginx)  │     │     (Flask)     │     │  (PostgreSQL)   │
+│   Port: 3000    │     │   Port: 5000    │     │   Port: 5432    │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
 
-You should see the React login page running locally.
+## Common Commands
+
+| Command | Description |
+|---------|-------------|
+| `docker compose up --build -d` | Build and start all containers |
+| `docker compose down` | Stop and remove containers |
+| `docker compose logs -f` | View logs from all services |
+| `docker compose logs -f web` | View backend logs only |
+| `docker compose ps` | Check container status |
+| `docker compose down -v` | Stop and remove containers + data |
+
+## Git Workflow
+
+1. Checkout master and pull latest
+   ```bash
+   git checkout master
+   git pull origin master
+   ```
+
+2. Create your feature branch
+   ```bash
+   git checkout -b your_name_feature
+   ```
+
+3. Make changes, commit, push
+   ```bash
+   git add .
+   git commit -m "your message"
+   git push origin your_name_feature
+   ```
+
+4. Create a Pull Request on GitHub
+
+## Project Structure
+
+```
+BRIGHTS2/
+├── app.py              # Flask application entry point
+├── models.py           # Database models (User)
+├── routes/
+│   └── auth.py         # Authentication endpoints
+├── frontend/
+│   ├── src/            # React source code
+│   ├── Dockerfile      # Frontend container config
+│   └── nginx.conf      # Nginx proxy config
+├── Dockerfile          # Backend container config
+├── docker-compose.yml  # Multi-container orchestration
+├── requirements.txt    # Python dependencies
+└── .env.example        # Environment template
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth/register` | POST | Create new user |
+| `/auth/login` | POST | Login and get session |
+| `/auth/logout` | GET/POST | Clear session |
+| `/auth/me` | GET | Get current user info |
+| `/auth/change-password` | POST | Update password |
+
+## Troubleshooting
+
+**Containers won't start:**
+```bash
+docker compose down -v
+docker compose up --build -d
+```
+
+**Database connection issues:**
+- Check `.env` file has correct `DATABASE_URL`
+- Ensure db container is healthy: `docker compose ps`
+
+**Frontend not loading:**
+- Check frontend container is running: `docker compose logs frontend`
+- Verify nginx config if getting 502 errors
+
+## Questions?
+
+Ask Harrison or ChatGPT.

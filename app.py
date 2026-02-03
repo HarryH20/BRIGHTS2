@@ -70,8 +70,8 @@ def set_security_headers(response):
 # ROUTES
 # =============================================================================
 @app.route("/")
-def hello_world():
-    return "Hello World!"
+def health_check():
+    return {"status": "healthy", "service": "brights-api"}
 
 
 # =============================================================================
