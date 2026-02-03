@@ -1,3 +1,5 @@
+# BRIGHTS2
+
 Alright Welcome. This readme has certain assumptions that one
 know the basics of Git and Docker.
 
@@ -12,7 +14,7 @@ Again this can be done from the UI in pycharm or from the command line. Pull the
 
 Checkout into your branch.
 
-Run docker compose up --build from the command line.
+Run **docker compose up --build** from the command line.
 
 To stop the container run docker compose stop.
 To start run docker compose start.
@@ -20,22 +22,18 @@ To start run docker compose start.
 If you have any questions ask Harrison or better ask ChatGPT.
 
 
+## Running the Frontend (React)
 
-Start the Frontend (React)
-
-The React application lives in the frontend/ directory.
+The React application lives in the `frontend/` directory.
 
 From the project root, run:
 
+```bash
 cd frontend
-
 npm install
-
 npm run dev
-
+```
 Once the development server starts, open your browser and navigate to:
+**http://localhost:5173**
 
-👉 http://localhost:5173
-
-You should see the React login page running locally
-
+You should see the React login page running locally.
