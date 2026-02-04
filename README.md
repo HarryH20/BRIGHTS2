@@ -31,9 +31,16 @@ A Flask + React web application with PostgreSQL database.
    ```
 
 4. **Access the app**
-   - Frontend (React): http://localhost:3000
-   - Backend API: http://localhost:5000
-   - Database: localhost:5432
+
+   **Open http://localhost:3000** (this is the main app)
+
+   | Service | URL | Notes |
+   |---------|-----|-------|
+   | Frontend | http://localhost:3000 | **Use this one** |
+   | Backend API | http://localhost:5000 | API only (frontend proxies here) |
+   | Database | localhost:5432 | Internal use |
+
+   > **Note:** Your IDE may show a link to port 5000 or a 172.x.x.x IP - ignore that. Always use **localhost:3000** for the full app.
 
 ## Architecture
 
@@ -82,17 +89,18 @@ A Flask + React web application with PostgreSQL database.
 
 ```
 BRIGHTS2/
-├── app.py              # Flask application entry point
-├── models.py           # Database models (User)
-├── routes/
-│   └── auth.py         # Authentication endpoints
+├── backend/
+│   ├── app.py          # Flask application entry point
+│   ├── models.py       # Database models (User)
+│   ├── routes/
+│   │   └── auth.py     # Authentication endpoints
+│   ├── Dockerfile      # Backend container config
+│   └── requirements.txt# Python dependencies
 ├── frontend/
 │   ├── src/            # React source code
 │   ├── Dockerfile      # Frontend container config
 │   └── nginx.conf      # Nginx proxy config
-├── Dockerfile          # Backend container config
 ├── docker-compose.yml  # Multi-container orchestration
-├── requirements.txt    # Python dependencies
 └── .env.example        # Environment template
 ```
 
