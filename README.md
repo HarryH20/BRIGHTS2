@@ -42,6 +42,22 @@ A Flask + React web application with PostgreSQL database.
 
    > **Note:** Your IDE may show a link to port 5000 or a 172.x.x.x IP - ignore that. Always use **localhost:3000** for the full app.
 
+## Database Options
+
+The app supports two database configurations:
+
+| Option | Use Case | Data Persistence |
+|--------|----------|------------------|
+| **Supabase** (default) | Team development | Shared across all devs |
+| Local Docker | Offline work | Per-machine only |
+
+To switch between them, edit `.env` and comment/uncomment the appropriate `DATABASE_URL`.
+
+### Supabase Setup (for new team members)
+1. Get the `DATABASE_URL` from your team lead
+2. Add it to your `.env` file
+3. That's it - the tables already exist
+
 ## Architecture
 
 ```
