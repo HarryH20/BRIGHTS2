@@ -1,49 +1,54 @@
-import { useState } from 'react'
-import Login from './Login'
+import { useEffect, useState } from "react";
+import Login from "./Login";
+import Register from "./Register";
 
 export default function App() {
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [page, setPage] = useState("login"); // "login" | "register"
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/auth/me", { credentials: "include" });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) setUser(data.user);
+      } finally {
+        setChecking(false);
+      }
+    })();
+  }, []);
+
+  async function logout() {
+    await fetch("/auth/logout", { method: "POST", credentials: "include" });
+    setUser(null);
+    setPage("login");
+  }
+
+  if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
 
   if (!user) {
-    return <Login onLogin={setUser} />
+    if (page === "register") {
+      return (
+        <Register
+          onRegistered={() => setPage("login")}
+          onGoToLogin={() => setPage("login")}
+        />
+      );
+    }
+    return (
+      <Login
+        onLogin={(u) => setUser(u)}
+        onGoToRegister={() => setPage("register")}
+      />
+    );
   }
 
   return (
-    <div style={styles.container}>
-      <h1>Welcome, {user.username}!</h1>
+    <div style={{ padding: 20 }}>
+      <h2>Welcome, {user.username}!</h2>
       <p>Role: {user.role}</p>
-      <p>Email: {user.email}</p>
-      <button
-        style={styles.button}
-        onClick={async () => {
-          await fetch('/auth/logout', { credentials: 'include' })
-          setUser(null)
-        }}
-      >
-        Logout
-      </button>
+      <button onClick={logout}>Logout</button>
     </div>
-  )
-}
-
-const styles = {
-  container: {
-    minHeight: '100vh',
-    display: 'grid',
-    placeItems: 'center',
-    padding: 16,
-    background: '#0b1220',
-    color: '#e9eefc',
-    textAlign: 'center',
-  },
-  button: {
-    marginTop: 20,
-    padding: '10px 24px',
-    borderRadius: 10,
-    border: 'none',
-    background: '#4f7cff',
-    color: 'white',
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
+  );
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, onGoToRegister }) {
   const [identifier, setIdentifier] = useState(""); // username OR email
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -153,6 +153,9 @@ export default function Login({ onLogin }) {
           <small style={{ opacity: 0.8 }}>
             Having trouble? Ask ChatGPT.
           </small>
+          <button type="button" onClick={onGoToRegister} style={styles.linkBtn}>
+            Create account
+          </button>
         </div>
       </form>
     </div>
@@ -226,5 +229,20 @@ const styles = {
     fontWeight: 700,
     cursor: "pointer",
   },
-  footer: { marginTop: 14, textAlign: "center" },
+  linkBtn: {
+    border: "none",
+    background: "transparent",
+    color: "#9bb7ff",
+    cursor: "pointer",
+    padding: 0,
+    textDecoration: "underline",
+    fontSize: "inherit",
+  },
+  footer: {
+  marginTop: 14,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
 };
