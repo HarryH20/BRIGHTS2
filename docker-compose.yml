@@ -1,4 +1,7 @@
 services:
+  # ===========================================
+  # MAIN APP: http://localhost:3000
+  # ===========================================
   frontend:
     build: ./frontend
     ports:
@@ -6,8 +9,9 @@ services:
     depends_on:
       - web
 
+  # Backend API (accessed via frontend proxy, not directly)
   web:
-    build: .
+    build: ./backend
     ports:
       - "5000:5000"
     environment:
