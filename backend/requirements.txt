@@ -13,6 +13,7 @@ MarkupSafe==3.0.3
 narwhals==2.15.0
 nest-asyncio==1.6.0
 packaging==26.0
+pandas==2.3.3
 plotly==6.5.2
 py4j==0.10.9.9
 pyspark==4.1.1
