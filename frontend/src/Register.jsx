@@ -4,7 +4,8 @@ export default function Register({ onRegistered, onGoToLogin }) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -29,6 +30,10 @@ export default function Register({ onRegistered, onGoToLogin }) {
       setError("Password must be at least 8 characters.");
       return;
     }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -49,6 +54,9 @@ export default function Register({ onRegistered, onGoToLogin }) {
 
       setSuccess("Account created! You can now sign in.");
       onRegistered?.(data.user);
+
+      setPassword("");
+      setConfirmPassword("");
 
       setLoading(false);
     } catch {
@@ -96,11 +104,47 @@ export default function Register({ onRegistered, onGoToLogin }) {
             style={styles.input}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            type="password"
+            type={showPassword ? "text" : "password"}
             autoComplete="new-password"
             placeholder="••••••••"
             required
           />
+        </label>
+
+        <label style={styles.label}>
+          Confirm Password
+          <input
+            style={styles.input}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
+            placeholder="••••••••"
+            required
+          />
+        </label>
+
+        {confirmPassword && password !== confirmPassword && (
+          <div style={styles.errorBox} role="alert">
+            Passwords do not match.
+          </div>
+        )}
+
+        <label
+            style={{
+              fontSize: 13,
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              marginBottom: 12,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showPassword}
+            onChange={() => setShowPassword((v) => !v)}
+          />
+          Show password
         </label>
 
         {error && (

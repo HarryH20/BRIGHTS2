@@ -9,6 +9,22 @@ services:
     depends_on:
       - web
 
+  # Dev Frontend for hot reload
+  frontend_dev:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3001:3000"
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    command: sh -c "npm install && npm run dev"
+    depends_on:
+      - web
+
   # Backend API (accessed via frontend proxy, not directly)
   web:
     build: ./backend
