@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify
+from routes.auth import login_required
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -190,6 +191,7 @@ def _build_roseplot_figure():
 
 
 @viz_bp.route("/roseplot")
+@login_required
 def roseplot():
     """Return the sprint-1 demo rose plot as Plotly JSON."""
     fig_dict = _build_roseplot_figure()
