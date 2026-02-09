@@ -23,8 +23,10 @@ db.init_app(app)
 
 # Register blueprints
 from routes.auth import auth_bp
+from routes.visualizations import viz_bp
 
 app.register_blueprint(auth_bp)
+app.register_blueprint(viz_bp)
 
 with app.app_context():
     db.create_all()

@@ -1,4 +1,5 @@
 import React from "react";
+import RosePlot from "./RosePlot";
 
 export default function Dashboard({ user, onLogout }) {
   const name = user?.username || "kirby";
@@ -53,52 +54,19 @@ export default function Dashboard({ user, onLogout }) {
             </div>
           </div>
 
-          {/* Charts placeholder: big chart */}
+          {/* Rose Plot Visualization */}
           <div style={{ ...styles.card, gridColumn: "1 / -1" }}>
             <div style={styles.cardHeader}>
-              <h2 style={styles.h2}>Data Visualizations</h2>
-              <span style={styles.badge}>Charts</span>
+              <h2 style={styles.h2}>Goal Progression — Rose Plot</h2>
+              <span style={styles.badge}>Sprint 1</span>
             </div>
-
-            <div style={styles.chartWrap}>
-              <div style={styles.chartPlaceholder}>
-                <div style={styles.chartTopRow}>
-                  <div style={styles.chartTitle}>Goal Trajectory (placeholder)</div>
-                  <div style={styles.chartHint}>Line chart • Timepoints</div>
-                </div>
-
-                <div style={styles.chartArea}>
-                  {/* Fake chart grid */}
-                  <div style={styles.chartGrid} />
-                  <div style={styles.chartGrid} />
-                  <div style={styles.chartGrid} />
-                  <div style={styles.chartGrid} />
-                  <div style={styles.chartGrid} />
-                </div>
-
-                <div style={styles.chartFooter}>
-                  <div style={styles.skeletonChip} />
-                  <div style={styles.skeletonChip} />
-                  <div style={styles.skeletonChip} />
-                </div>
-              </div>
-
-              {/* Two small chart cards */}
-              <div style={styles.chartRow}>
-                <div style={styles.smallChart}>
-                  <div style={styles.smallChartTitle}>Agency Score (placeholder)</div>
-                  <div style={styles.smallChartBox} />
-                </div>
-                <div style={styles.smallChart}>
-                  <div style={styles.smallChartTitle}>Goal Categories (placeholder)</div>
-                  <div style={styles.smallChartBox} />
-                </div>
-              </div>
-            </div>
-
-            <p style={{ ...styles.muted, marginTop: 12 }}>
-              Charts will appear here once survey data is connected (e.g., Plotly/Recharts).
+            <p style={styles.muted}>
+              Likert responses (Q39–Q41) across timepoints T2–T6. Bottom row
+              shows the distribution summary.
             </p>
+            <div style={styles.chartWrap}>
+              <RosePlot />
+            </div>
           </div>
         </section>
       </main>
@@ -187,60 +155,5 @@ const styles = {
     background: "linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.12), rgba(255,255,255,0.06))",
   },
 
-  chartWrap: { marginTop: 12, display: "grid", gap: 14 },
-  chartPlaceholder: {
-    borderRadius: 16,
-    border: "1px dashed rgba(155,183,255,0.35)",
-    background: "rgba(11,18,32,0.65)",
-    padding: 14,
-  },
-  chartTopRow: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" },
-  chartTitle: { fontWeight: 800, fontSize: 14 },
-  chartHint: { opacity: 0.7, fontSize: 12 },
-  chartArea: {
-    marginTop: 12,
-    height: 220,
-    borderRadius: 14,
-    border: "1px solid rgba(155,183,255,0.14)",
-    background:
-      "repeating-linear-gradient(0deg, rgba(255,255,255,0.05), rgba(255,255,255,0.05) 1px, transparent 1px, transparent 32px)",
-    display: "grid",
-    alignItems: "end",
-    padding: 12,
-    gap: 10,
-  },
-  chartGrid: {
-    height: "100%",
-    borderRadius: 10,
-    background:
-      "linear-gradient(180deg, rgba(79,124,255,0.14), rgba(79,124,255,0.02))",
-  },
-  chartFooter: { marginTop: 12, display: "flex", gap: 10 },
-  skeletonChip: {
-    height: 22,
-    width: 90,
-    borderRadius: 999,
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.10)",
-  },
-
-  chartRow: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 14,
-  },
-  smallChart: {
-    borderRadius: 16,
-    border: "1px dashed rgba(155,183,255,0.28)",
-    background: "rgba(11,18,32,0.65)",
-    padding: 14,
-  },
-  smallChartTitle: { fontWeight: 800, fontSize: 14, marginBottom: 10 },
-  smallChartBox: {
-    height: 140,
-    borderRadius: 14,
-    border: "1px solid rgba(155,183,255,0.14)",
-    background:
-      "linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.10), rgba(255,255,255,0.06))",
-  },
+  chartWrap: { marginTop: 12 },
 };
