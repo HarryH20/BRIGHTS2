@@ -1,7 +1,12 @@
+import logging
+import time
+
 from flask import Blueprint, jsonify
 from routes.auth import login_required
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+logger = logging.getLogger(__name__)
 
 viz_bp = Blueprint("viz", __name__, url_prefix="/api/visualizations")
 
@@ -194,5 +199,14 @@ def _build_roseplot_figure():
 @login_required
 def roseplot():
     """Return the sprint-1 demo rose plot as Plotly JSON."""
-    fig_dict = _build_roseplot_figure()
-    return jsonify(fig_dict)
+    start = time.time()
+    try:
+        fig_dict = _build_roseplot_figure()
+        duration_ms = (time.time() - start) * 1000
+        logger.info("Rose plot generated in %.1fms", duration_ms)
+        if duration_ms > 500:
+            logger.warning("Slow chart generation: roseplot took %.1fms", duration_ms)
+        return jsonify(fig_dict)
+    except Exception:
+        logger.error("Failed to generate rose plot", exc_info=True)
+        return jsonify({"error": "Failed to generate visualization"}), 500

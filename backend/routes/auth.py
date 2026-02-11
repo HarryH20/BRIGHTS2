@@ -1,19 +1,59 @@
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from functools import wraps
-from flask import Blueprint, request, jsonify, session
-from models import db, User
+from flask import Blueprint, request, jsonify, session, g
+from models import db, User, AuditLog, SessionLog
+
+logger = logging.getLogger(__name__)
+security_logger = logging.getLogger("security")
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
 # =============================================================================
-# AUTH DECORATOR (for protecting routes)
+# HELPERS
+# =============================================================================
+def _get_ip():
+    """Get client IP, respecting X-Forwarded-For behind a proxy."""
+    return request.headers.get("X-Forwarded-For", request.remote_addr)
+
+
+def _get_request_id():
+    return getattr(g, "request_id", None)
+
+
+def _audit(event_type, user_id=None, detail=None):
+    """Write an audit log entry to the database."""
+    try:
+        entry = AuditLog(
+            user_id=user_id,
+            event_type=event_type,
+            detail=detail,
+            ip_address=_get_ip(),
+            request_id=_get_request_id(),
+        )
+        db.session.add(entry)
+        db.session.commit()
+    except Exception:
+        logger.error("Failed to write audit log: %s user=%s", event_type, user_id, exc_info=True)
+        db.session.rollback()
+
+
+# =============================================================================
+# AUTH DECORATORS
 # =============================================================================
 def login_required(f):
     """Decorator to require authentication for a route."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("user_id"):
+            security_logger.warning(
+                "Unauthorized access attempt: %s %s ip=%s",
+                request.method,
+                request.path,
+                _get_ip(),
+            )
+            _audit(AuditLog.UNAUTHORIZED_ACCESS, detail=f"{request.method} {request.path}")
             return jsonify({"error": "Authentication required"}), 401
         return f(*args, **kwargs)
     return decorated_function
@@ -24,9 +64,22 @@ def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("user_id"):
+            security_logger.warning(
+                "Unauthorized access attempt (admin route): %s %s ip=%s",
+                request.method,
+                request.path,
+                _get_ip(),
+            )
+            _audit(AuditLog.UNAUTHORIZED_ACCESS, detail=f"Admin route: {request.method} {request.path}")
             return jsonify({"error": "Authentication required"}), 401
         user = db.session.get(User, session["user_id"])
         if not user or user.role != "admin":
+            security_logger.warning(
+                "Forbidden: non-admin user=%s attempted %s %s",
+                session["user_id"],
+                request.method,
+                request.path,
+            )
             return jsonify({"error": "Admin access required"}), 403
         return f(*args, **kwargs)
     return decorated_function
@@ -67,17 +120,26 @@ def register():
 
     # Check if user exists
     if User.query.filter_by(username=username).first():
+        logger.info("Registration rejected: username '%s' already taken ip=%s", username, _get_ip())
         return jsonify({"error": "Username already taken"}), 409
 
     if User.query.filter_by(email=email).first():
+        logger.info("Registration rejected: email already registered ip=%s", _get_ip())
         return jsonify({"error": "Email already registered"}), 409
 
     # Create user
-    user = User(username=username, email=email)
-    user.set_password(password)
+    try:
+        user = User(username=username, email=email)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+    except Exception:
+        logger.error("Registration failed for username='%s'", username, exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Registration failed"}), 500
 
-    db.session.add(user)
-    db.session.commit()
+    logger.info("User registered: id=%s username='%s'", user.id, user.username)
+    _audit(AuditLog.REGISTER, user_id=user.id, detail=f"username={user.username}")
 
     return jsonify({
         "message": "User registered successfully",
@@ -114,16 +176,25 @@ def login():
         return jsonify({"error": "Username or email is required"}), 400
 
     # Find user
+    identifier = username or email
     if username:
         user = User.query.filter_by(username=username).first()
     else:
         user = User.query.filter_by(email=email).first()
 
     if not user:
+        security_logger.warning("Login failed: user not found identifier='%s' ip=%s", identifier, _get_ip())
+        _audit(AuditLog.LOGIN_FAILED, detail=f"User not found: {identifier}")
         return jsonify({"error": "Invalid credentials"}), 401
 
     # Check if account is locked
     if user.is_locked():
+        security_logger.warning(
+            "Login blocked: account locked user=%s ip=%s locked_until=%s",
+            user.id,
+            _get_ip(),
+            user.locked_until.isoformat(),
+        )
         return jsonify({
             "error": "Account locked due to too many failed attempts",
             "locked_until": user.locked_until.isoformat()
@@ -135,7 +206,22 @@ def login():
         db.session.commit()
 
         remaining = 5 - user.failed_attempts
+        security_logger.warning(
+            "Login failed: wrong password user=%s attempts=%s/5 ip=%s",
+            user.id,
+            user.failed_attempts,
+            _get_ip(),
+        )
+        _audit(AuditLog.LOGIN_FAILED, user_id=user.id, detail=f"Wrong password, attempt {user.failed_attempts}/5")
+
         if user.is_locked():
+            security_logger.warning(
+                "Account locked: user=%s ip=%s locked_until=%s",
+                user.id,
+                _get_ip(),
+                user.locked_until.isoformat(),
+            )
+            _audit(AuditLog.ACCOUNT_LOCKED, user_id=user.id, detail=f"Locked until {user.locked_until.isoformat()}")
             return jsonify({
                 "error": "Account locked due to too many failed attempts",
                 "locked_until": user.locked_until.isoformat()
@@ -146,6 +232,12 @@ def login():
             "attempts_remaining": max(0, remaining)
         }), 401
 
+    # Check if account was previously locked and is now unlocked
+    was_locked = user.locked_until is not None
+    if was_locked:
+        logger.info("Account unlocked: user=%s (lockout expired)", user.id)
+        _audit(AuditLog.ACCOUNT_UNLOCKED, user_id=user.id, detail="Lockout expired, successful login")
+
     # Successful login
     user.record_successful_login()
     db.session.commit()
@@ -155,7 +247,26 @@ def login():
     session["user_id"] = user.id
     session["username"] = user.username
     session["role"] = user.role
+    session["login_at"] = datetime.now(timezone.utc).isoformat()
     session.permanent = True
+
+    logger.info("User login successful: id=%s username='%s'", user.id, user.username)
+    security_logger.info("LOGIN_SUCCESS user=%s ip=%s", user.id, _get_ip())
+    _audit(AuditLog.LOGIN_SUCCESS, user_id=user.id)
+
+    # Create session log entry
+    try:
+        session_entry = SessionLog(
+            user_id=user.id,
+            login_at=datetime.now(timezone.utc),
+            ip_address=_get_ip(),
+        )
+        db.session.add(session_entry)
+        db.session.commit()
+        session["session_log_id"] = session_entry.id
+    except Exception:
+        logger.error("Failed to create session log for user=%s", user.id, exc_info=True)
+        db.session.rollback()
 
     return jsonify({
         "message": "Login successful",
@@ -176,6 +287,38 @@ def logout():
 
     GET/POST /auth/logout
     """
+    user_id = session.get("user_id")
+    username = session.get("username")
+    session_log_id = session.get("session_log_id")
+    login_at_str = session.get("login_at")
+
+    # Calculate session duration
+    duration_str = "unknown"
+    if login_at_str:
+        try:
+            login_at = datetime.fromisoformat(login_at_str)
+            duration_seconds = int((datetime.now(timezone.utc) - login_at).total_seconds())
+            duration_str = f"{duration_seconds}s"
+        except (ValueError, TypeError):
+            duration_seconds = None
+    else:
+        duration_seconds = None
+
+    # Close the session log entry
+    if session_log_id:
+        try:
+            session_entry = db.session.get(SessionLog, session_log_id)
+            if session_entry:
+                session_entry.record_logout()
+                db.session.commit()
+        except Exception:
+            logger.error("Failed to close session log id=%s", session_log_id, exc_info=True)
+            db.session.rollback()
+
+    if user_id:
+        logger.info("User logout: id=%s username='%s' duration=%s", user_id, username, duration_str)
+        _audit(AuditLog.LOGOUT, user_id=user_id, detail=f"Session duration: {duration_str}")
+
     session.clear()
     return jsonify({"message": "Logged out successfully"}), 200
 
@@ -191,6 +334,8 @@ def me():
     user = db.session.get(User, session["user_id"])
 
     if not user:
+        logger.warning("Session references non-existent user_id=%s, clearing session", session["user_id"])
+        _audit(AuditLog.SESSION_EXPIRED, user_id=session["user_id"], detail="User not found in database")
         session.clear()
         return jsonify({"error": "User not found"}), 404
 
@@ -232,9 +377,19 @@ def change_password():
     user = db.session.get(User, session["user_id"])
 
     if not user.check_password(current_password):
+        security_logger.warning("Password change failed: wrong current password user=%s ip=%s", user.id, _get_ip())
         return jsonify({"error": "Current password is incorrect"}), 401
 
-    user.set_password(new_password)
-    db.session.commit()
+    try:
+        user.set_password(new_password)
+        db.session.commit()
+    except Exception:
+        logger.error("Password change failed for user=%s", user.id, exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Password change failed"}), 500
+
+    logger.info("Password changed: user=%s", user.id)
+    security_logger.info("PASSWORD_CHANGE user=%s ip=%s", user.id, _get_ip())
+    _audit(AuditLog.PASSWORD_CHANGE, user_id=user.id)
 
     return jsonify({"message": "Password changed successfully"}), 200

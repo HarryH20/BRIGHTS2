@@ -20,6 +20,8 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
+backend/logs/
 
 # Local documentation
 docs/

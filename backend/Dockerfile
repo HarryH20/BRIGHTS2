@@ -17,11 +17,14 @@ RUN useradd --create-home --shell /bin/bash appuser
 
 COPY . .
 
-# Change ownership to non-root user
-RUN chown -R appuser:appuser /app
+# Create logs directory and set ownership before switching user
+RUN mkdir -p /app/logs && chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser
+
+# Declare the logs volume so Docker initializes it with correct ownership
+VOLUME /app/logs
 
 EXPOSE 5000
 
