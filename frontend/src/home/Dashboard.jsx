@@ -1,5 +1,5 @@
 import React from "react";
-import RosePlot from "./RosePlot";
+import RosePlot from "../graphs/RosePlot.jsx";
 
 export default function Dashboard({ user, onLogout }) {
   const name = user?.username || "kirby";
