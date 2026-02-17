@@ -39,10 +39,12 @@ db.init_app(app)
 from routes.auth import auth_bp
 from routes.visualizations import viz_bp
 from routes.logs import logs_bp
+from routes.admin import admin_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(viz_bp)
 app.register_blueprint(logs_bp)
+app.register_blueprint(admin_bp)
 
 # Create tables
 with app.app_context():
