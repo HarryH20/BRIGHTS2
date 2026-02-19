@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import Login from "./Login";
-import Register from "./Register";
-import Dashboard from "./Dashboard";
+import Login from "./auth/Login.jsx";
+import Register from "./auth/Register.jsx";
+import Dashboard from "./home/Dashboard.jsx";
 
 export default function App() {
   const [user, setUser] = useState(null);
