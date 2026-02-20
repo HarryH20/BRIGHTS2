@@ -219,6 +219,91 @@ docker compose down -v && docker compose up --build -d
 
 ---
 
+## Azure Deployment
+
+The app deploys to **Azure Container Apps** with images stored in **Azure Container Registry (ACR)**. The database stays on Supabase — no changes needed there.
+
+### One-time Azure setup (do this once via portal or CLI)
+
+```bash
+# 1. Create a resource group
+az group create --name brights-rg --location australiaeast
+
+# 2. Create a container registry
+az acr create --name brightsregistry --resource-group brights-rg --sku Basic --admin-enabled true
+
+# 3. Create a Container Apps environment
+az containerapp env create --name brights-env --resource-group brights-rg --location australiaeast
+
+# 4. Deploy the backend (internal ingress — not public)
+az containerapp create \
+  --name brights-backend \
+  --resource-group brights-rg \
+  --environment brights-env \
+  --image brightsregistry.azurecr.io/brights-backend:latest \
+  --registry-server brightsregistry.azurecr.io \
+  --target-port 5000 \
+  --ingress internal \
+  --env-vars \
+      FLASK_ENV=production \
+      FLASK_SECRET_KEY=secretref:flask-secret-key \
+      DATABASE_URL=secretref:database-url \
+      SUPABASE_URL=secretref:supabase-url \
+      SUPABASE_SERVICE_KEY=secretref:supabase-service-key
+
+# 5. Deploy the frontend (external ingress — public)
+az containerapp create \
+  --name brights-frontend \
+  --resource-group brights-rg \
+  --environment brights-env \
+  --image brightsregistry.azurecr.io/brights-frontend:latest \
+  --registry-server brightsregistry.azurecr.io \
+  --target-port 80 \
+  --ingress external \
+  --env-vars BACKEND_HOST=brights-backend
+```
+
+> **Note:** `brights-backend` as the `BACKEND_HOST` value works because both Container Apps share the same environment — ACA resolves the app name internally on port 80.
+
+### Set secrets on the backend Container App
+
+In the Azure portal: brights-backend → Secrets → Add each of:
+
+| Secret name | Value |
+|-------------|-------|
+| `flask-secret-key` | Your Flask secret key |
+| `database-url` | Supabase `DATABASE_URL` |
+| `supabase-url` | Your Supabase project URL |
+| `supabase-service-key` | Your Supabase service role key |
+
+### GitHub Actions secrets (for auto-deploy)
+
+In GitHub → Settings → Secrets → Actions, add:
+
+| Secret | How to get it |
+|--------|---------------|
+| `AZURE_CREDENTIALS` | `az ad sp create-for-rbac --name brights-deploy --role contributor --scopes /subscriptions/{sub-id}/resourceGroups/brights-rg --sdk-auth` |
+| `ACR_NAME` | `brightsregistry` (just the name, no `.azurecr.io`) |
+| `AZURE_RG` | `brights-rg` |
+
+### Deploy flow
+
+Once set up, every push to the `prod` branch automatically:
+1. Runs frontend build + backend check + Docker build (CI)
+2. Builds both images in ACR
+3. Rolls out new images to both Container Apps (zero downtime)
+
+---
+
+## Future: moving DB from Supabase to AWS RDS
+
+Zero code changes required — it's entirely an ops task:
+1. `pg_dump` from Supabase
+2. `pg_restore` into the new RDS instance
+3. Update `DATABASE_URL` secret on the backend Container App
+
+---
+
 ## Questions?
 
 Ask Harrison or Derek.

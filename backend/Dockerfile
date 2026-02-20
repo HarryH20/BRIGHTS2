@@ -5,10 +5,6 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    openjdk-21-jre-headless \
-    && rm -rf /var/lib/apt/lists/*
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -28,4 +24,7 @@ VOLUME /app/logs
 
 EXPOSE 5000
 
-CMD ["python", "app.py"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/')" 2>/dev/null || exit 1
+
+CMD ["gunicorn", "--workers", "2", "--threads", "2", "--bind", "0.0.0.0:5000", "app:app"]
