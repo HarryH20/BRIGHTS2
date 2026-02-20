@@ -1,8 +1,10 @@
 import logging
+import os
 import secrets
 from datetime import datetime, timezone
 from functools import wraps
 from flask import Blueprint, request, jsonify, session, g
+import requests as http_req
 from models import db, User, AuditLog, SessionLog
 
 logger = logging.getLogger(__name__)
@@ -347,6 +349,7 @@ def me():
             "email": user.email,
             "role": user.role,
             "participant_id": user.participant_id,
+            "avatar_url": user.avatar_url,
             "created_at": user.created_at.isoformat(),
             "last_login": user.last_login.isoformat() if user.last_login else None
         }
@@ -395,3 +398,57 @@ def change_password():
     _audit(AuditLog.PASSWORD_CHANGE, user_id=user.id)
 
     return jsonify({"message": "Password changed successfully"}), 200
+
+
+ALLOWED_AVATAR_EXTS = {"jpg", "jpeg", "png", "gif", "webp"}
+MAX_AVATAR_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+@auth_bp.route("/avatar", methods=["POST"])
+@login_required
+def upload_avatar():
+    """
+    Upload a profile picture to Supabase Storage.
+
+    POST /auth/avatar
+    Body: multipart/form-data with field "file"
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    f = request.files["file"]
+    ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    if ext not in ALLOWED_AVATAR_EXTS:
+        return jsonify({"error": "File type not allowed"}), 400
+
+    data = f.read()
+    if len(data) > MAX_AVATAR_BYTES:
+        return jsonify({"error": "File too large (max 2MB)"}), 400
+
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    if not supabase_url or not service_key:
+        logger.error("SUPABASE_URL or SUPABASE_SERVICE_KEY not configured")
+        return jsonify({"error": "Storage not configured"}), 500
+
+    user = db.session.get(User, session["user_id"])
+    object_path = f"avatars/{user.id}.{ext}"
+
+    resp = http_req.put(
+        f"{supabase_url}/storage/v1/object/{object_path}",
+        headers={
+            "Authorization": f"Bearer {service_key}",
+            "Content-Type": f.content_type,
+            "x-upsert": "true",
+        },
+        data=data,
+    )
+    if resp.status_code not in (200, 201):
+        logger.error("Supabase Storage upload failed: %s", resp.text)
+        return jsonify({"error": "Upload failed"}), 500
+
+    public_url = f"{supabase_url}/storage/v1/object/public/{object_path}"
+    user.avatar_url = public_url
+    db.session.commit()
+    logger.info("Avatar updated: user=%s", user.id)
+    return jsonify({"avatar_url": public_url}), 200

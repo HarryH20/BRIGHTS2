@@ -20,6 +20,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="user")  # user, admin
     participant_id = db.Column(db.String(32), unique=True, nullable=True, index=True)
+    avatar_url = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
     failed_attempts = db.Column(db.Integer, nullable=False, default=0)
