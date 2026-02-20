@@ -1,12 +1,18 @@
 # BRIGHTS2
 
-A Flask + React web application with PostgreSQL database.
+A full-stack web application for visualising and tracking "beyond-the-self" goal progression data from a research study. Participants can view their goals, track progress across survey timepoints (T2–T6), and explore their data through interactive visualisations.
+
+Built with Flask (backend), React/Vite (frontend), PostgreSQL via Supabase (database), running in Docker.
+
+---
 
 ## Prerequisites
 
 - Docker Desktop installed and running
 - Git installed
 - GitHub account
+
+---
 
 ## Quick Start
 
@@ -20,10 +26,11 @@ A Flask + React web application with PostgreSQL database.
    ```bash
    cp .env.example .env
    ```
-   Then generate a secret key and add it to `.env`:
+   Fill in the values — get `DATABASE_URL` from your team lead, generate a secret key:
    ```bash
    python3 -c "import secrets; print(secrets.token_hex(32))"
    ```
+   For profile picture uploads, also add `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` (service role key from Supabase dashboard → Settings → API).
 
 3. **Start all services**
    ```bash
@@ -32,41 +39,132 @@ A Flask + React web application with PostgreSQL database.
 
 4. **Access the app**
 
-   **Open http://localhost:3000** (this is the main app)
-
    | Service | URL | Notes |
    |---------|-----|-------|
    | Frontend | http://localhost:3000 | **Use this one** |
-   | Backend API | http://localhost:5000 | API only (frontend proxies here) |
-   | Database | localhost:5432 | Internal use |
+   | Backend API | http://localhost:5000 | API only |
 
-   > **Note:** Your IDE may show a link to port 5000 or a 172.x.x.x IP - ignore that. Always use **localhost:3000** for the full app.
+   > Your IDE may show a link to port 5000 — ignore it. Always use **localhost:3000**.
+
+---
+
+## Demo Accounts
+
+Three demo accounts are pre-seeded, each linked to a real participant in the research dataset:
+
+| Username | Password | Goals |
+|----------|----------|-------|
+| demo1 | BrightsDemo2026! | lose weight / make money / be available to children |
+| demo2 | BrightsDemo2026! | get into masters / get interview / get hired |
+| demo3 | BrightsDemo2026! | fix car / make extra money / read Bible |
+
+---
+
+## Features
+
+- **Authentication** — register, login, logout, change password, account lockout after 5 failed attempts
+- **Profile picture** — upload via Supabase Storage, displayed across the app
+- **Dashboard** — per-goal cards with real goal names and latest survey scores, live timepoint list
+- **Goal pages** — T2–T6 score breakdown (progress, confidence, importance) per goal
+- **Survey results** — all goals' scores for a selected timepoint
+- **Survey analysis** — score changes vs Week 2 baseline, with directional arrows
+- **Rose plot** — Plotly polar chart of goal progression across all timepoints
+- **Audit logging** — all auth events written to database with IP and request ID
+
+---
 
 ## Database Options
-
-The app supports two database configurations:
 
 | Option | Use Case | Data Persistence |
 |--------|----------|------------------|
 | **Supabase** (default) | Team development | Shared across all devs |
 | Local Docker | Offline work | Per-machine only |
 
-To switch between them, edit `.env` and comment/uncomment the appropriate `DATABASE_URL`.
+To switch, edit `.env` and comment/uncomment the appropriate `DATABASE_URL`.
 
-### Supabase Setup (for new team members)
-1. Get the `DATABASE_URL` from your team lead
-2. Add it to your `.env` file
-3. That's it - the tables already exist
+### New team member setup
+1. Get `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` from your team lead
+2. Add them to your `.env`
+3. Tables already exist — no migration needed
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│    Frontend     │────▶│     Backend     │────▶│    Database     │
-│  (React/Nginx)  │     │     (Flask)     │     │  (PostgreSQL)   │
-│   Port: 3000    │     │   Port: 5000    │     │   Port: 5432    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+┌─────────────────┐     ┌─────────────────┐     ┌──────────────────────┐
+│    Frontend     │────▶│     Backend     │────▶│  PostgreSQL/Supabase │
+│  (React/Nginx)  │     │     (Flask)     │     │  + Supabase Storage  │
+│   Port: 3000    │     │   Port: 5000    │     │                      │
+└─────────────────┘     └─────────────────┘     └──────────────────────┘
 ```
+
+---
+
+## Project Structure
+
+```
+BRIGHTS2/
+├── backend/
+│   ├── app.py                        # Flask entry point, middleware, error handlers
+│   ├── models.py                     # SQLAlchemy models (User, AuditLog, SessionLog)
+│   ├── logging_config.py             # Centralised logging setup
+│   ├── routes/
+│   │   ├── auth.py                   # Auth endpoints (/auth/*)
+│   │   └── visualizations.py        # Visualisation endpoints (/api/visualizations/*)
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx                   # Router + auth state
+│   │   ├── auth/
+│   │   │   ├── Login.jsx
+│   │   │   └── Register.jsx
+│   │   ├── home/
+│   │   │   ├── Dashboard.jsx         # Main dashboard with goal cards
+│   │   │   ├── GoalPage.jsx          # Per-goal T2–T6 score table
+│   │   │   ├── OverviewPage.jsx      # Rose plot full view
+│   │   │   ├── SurveyResults.jsx     # All goals' scores for a timepoint
+│   │   │   ├── SurveyAnalysis.jsx    # Score changes vs baseline
+│   │   │   ├── Profile.jsx           # Account settings, password, avatar
+│   │   │   └── HomeLayout.jsx        # Shared nav/layout wrapper
+│   │   └── graphs/
+│   │       └── RosePlot.jsx          # Plotly rose plot component
+│   ├── Dockerfile
+│   └── nginx.conf
+├── docs/
+│   ├── CLAUDE.md                     # Project standards for AI-assisted development
+│   ├── sprint3.md                    # Sprint 3 deliverables
+│   ├── SECURITY_ROADMAP.md
+│   └── TASKS.md
+├── anaylsis/                         # Data science work
+├── docker-compose.yml
+└── .env.example
+```
+
+---
+
+## API Endpoints
+
+### Auth (`/auth/*`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/auth/register` | POST | Create new user |
+| `/auth/login` | POST | Login and create session |
+| `/auth/logout` | GET/POST | Clear session |
+| `/auth/me` | GET | Current user info (includes `avatar_url`, `participant_id`) |
+| `/auth/change-password` | POST | Update password |
+| `/auth/avatar` | POST | Upload profile picture to Supabase Storage |
+
+### Visualisations (`/api/visualizations/*`)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/visualizations/goals` | GET | Goal text + T2–T6 scores for current user |
+| `/api/visualizations/roseplot` | GET | Plotly rose plot figure for current user |
+
+---
 
 ## Common Commands
 
@@ -74,78 +172,53 @@ To switch between them, edit `.env` and comment/uncomment the appropriate `DATAB
 |---------|-------------|
 | `docker compose up --build -d` | Build and start all containers |
 | `docker compose down` | Stop and remove containers |
-| `docker compose logs -f` | View logs from all services |
-| `docker compose logs -f web` | View backend logs only |
+| `docker compose logs -f web` | Backend logs |
+| `docker compose logs -f frontend` | Frontend logs |
 | `docker compose ps` | Check container status |
-| `docker compose down -v` | Stop and remove containers + data |
+
+---
 
 ## Git Workflow
 
-1. Checkout master and pull latest
+1. Pull latest master
    ```bash
-   git checkout master
-   git pull origin master
+   git checkout master && git pull origin master
    ```
-
-2. Create your feature branch
+2. Create your branch
    ```bash
    git checkout -b your_name_feature
    ```
-
-3. Make changes, commit, push
+3. Commit and push
    ```bash
-   git add .
+   git add <files>
    git commit -m "your message"
    git push origin your_name_feature
    ```
+4. Open a Pull Request on GitHub targeting `master`
 
-4. Create a Pull Request on GitHub
-
-## Project Structure
-
-```
-BRIGHTS2/
-├── backend/
-│   ├── app.py          # Flask application entry point
-│   ├── models.py       # Database models (User)
-│   ├── routes/
-│   │   └── auth.py     # Authentication endpoints
-│   ├── Dockerfile      # Backend container config
-│   └── requirements.txt# Python dependencies
-├── frontend/
-│   ├── src/            # React source code
-│   ├── Dockerfile      # Frontend container config
-│   └── nginx.conf      # Nginx proxy config
-├── docker-compose.yml  # Multi-container orchestration
-└── .env.example        # Environment template
-```
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/auth/register` | POST | Create new user |
-| `/auth/login` | POST | Login and get session |
-| `/auth/logout` | GET/POST | Clear session |
-| `/auth/me` | GET | Get current user info |
-| `/auth/change-password` | POST | Update password |
+---
 
 ## Troubleshooting
 
 **Containers won't start:**
 ```bash
-docker compose down -v
-docker compose up --build -d
+docker compose down -v && docker compose up --build -d
 ```
 
 **Database connection issues:**
-- Check `.env` file has correct `DATABASE_URL`
-- Ensure db container is healthy: `docker compose ps`
+- Check `.env` has correct `DATABASE_URL`
+- Run `docker compose ps` to verify containers are healthy
 
-**Frontend not loading:**
-- Check frontend container is running: `docker compose logs frontend`
-- Verify nginx config if getting 502 errors
+**Frontend not loading / 502 errors:**
+- Check `docker compose logs frontend`
+- Verify nginx config
+
+**Avatar uploads failing:**
+- Confirm `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are set in `.env`
+- Confirm the `avatars` bucket exists in Supabase Storage and is set to **Public**
+
+---
 
 ## Questions?
 
-Ask Harrison or ChatGPT.
+Ask Harrison or Derek.
