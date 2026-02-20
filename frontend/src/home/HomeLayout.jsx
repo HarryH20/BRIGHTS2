@@ -25,6 +25,23 @@ export default function HomeLayout({ user, onLogout, title, rightSlot, children 
         </div>
       </header>
       <main style={styles.main}>{children}</main>
+
+      {user?.participant_id && (
+        <div style={{
+          position: 'fixed',
+          bottom: '12px',
+          right: '16px',
+          fontSize: '10px',
+          opacity: 0.25,
+          color: '#c8d6f0',
+          fontFamily: 'monospace',
+          letterSpacing: '0.05em',
+          pointerEvents: 'none',
+          userSelect: 'none',
+        }}>
+          ID: {user.participant_id}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,10 @@
 import logging
 import time
+from collections import Counter, defaultdict
 
-from flask import Blueprint, jsonify
+import sqlalchemy
+from flask import Blueprint, jsonify, session
+from models import db, User
 from routes.auth import login_required
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -37,7 +40,7 @@ QUESTION_LABELS = {
     "Q41": "Goal importance",
 }
 
-# Demo data: scores per timepoint per question (mimics a real participant)
+# Fallback demo data: used only when no GoalIntervention rows exist for a user
 DEMO_SCORES = {
     2: {"Q39": 3, "Q40": 4, "Q41": 5},
     3: {"Q39": 4, "Q40": 5, "Q41": 5},
@@ -47,11 +50,72 @@ DEMO_SCORES = {
 }
 
 
+def _fetch_participant_scores(participant_id):
+    """
+    Query GoalIntervention for the given participant_id.
+    Returns a scores dict {timepoint: {Q39: int, Q40: int, Q41: int}}
+    averaged across all non-blank goals, or None if no rows found.
+    """
+    if not participant_id:
+        return None
+
+    with db.engine.connect() as conn:
+        result = conn.execute(
+            sqlalchemy.text(
+                '''
+                SELECT "GoalID", "GoalT1",
+                       "GT2Q39","GT2Q40","GT2Q41",
+                       "GT3Q39","GT3Q40","GT3Q41",
+                       "GT4Q39","GT4Q40","GT4Q41",
+                       "GT5Q39","GT5Q40","GT5Q41",
+                       "GT6Q39","GT6Q40","GT6Q41"
+                FROM "GoalIntervention"
+                WHERE "ID" = :pid
+                  AND "GoalT1" IS NOT NULL
+                  AND TRIM("GoalT1") != \'\'
+                ORDER BY "GoalID"
+                '''
+            ),
+            {"pid": participant_id},
+        )
+        rows = result.fetchall()
+
+    if not rows:
+        return None
+
+    # Average non-null scores across all goals for each timepoint/question
+    totals = defaultdict(lambda: defaultdict(list))
+    for row in rows:
+        mapping = row._mapping
+        for t in range(2, 7):
+            for q in ("Q39", "Q40", "Q41"):
+                col = f"GT{t}{q}"
+                val = mapping.get(col)
+                if val is not None:
+                    try:
+                        totals[t][q].append(int(val))
+                    except (ValueError, TypeError):
+                        pass
+
+    scores = {}
+    for t in range(2, 7):
+        scores[t] = {}
+        for q in ("Q39", "Q40", "Q41"):
+            vals = totals[t][q]
+            if vals:
+                scores[t][q] = round(sum(vals) / len(vals))
+            else:
+                # Fall back to neutral (4) for missing timepoints
+                scores[t][q] = DEMO_SCORES[t][q]
+
+    return scores
+
+
 def _score_to_angle(score):
     return (score - 1) * 30
 
 
-def _build_roseplot_figure():
+def _build_roseplot_figure(scores):
     """Build the 6x3 rose plot grid as a Plotly figure dict."""
 
     subplot_titles = []
@@ -73,7 +137,7 @@ def _build_roseplot_figure():
     # Rows 1-5: individual timepoint scores
     for row_idx, t in enumerate(range(2, 7), start=1):
         for col_idx, (q_key, q_label) in enumerate(QUESTION_LABELS.items(), start=1):
-            score = DEMO_SCORES[t][q_key]
+            score = scores[t][q_key]
             angle = _score_to_angle(score)
             color = SCORE_COLORS[score]
 
@@ -97,10 +161,8 @@ def _build_roseplot_figure():
 
     # Row 6: summary distribution across T2-T6
     for col_idx, (q_key, q_label) in enumerate(QUESTION_LABELS.items(), start=1):
-        scores = [DEMO_SCORES[t][q_key] for t in range(2, 7)]
-        from collections import Counter
-
-        counts = Counter(scores)
+        timepoint_scores = [scores[t][q_key] for t in range(2, 7)]
+        counts = Counter(timepoint_scores)
         max_count = max(counts.values())
 
         for score, count in counts.items():
@@ -198,10 +260,21 @@ def _build_roseplot_figure():
 @viz_bp.route("/roseplot")
 @login_required
 def roseplot():
-    """Return the sprint-1 demo rose plot as Plotly JSON."""
+    """Return the rose plot for the current user's GoalIntervention data."""
     start = time.time()
     try:
-        fig_dict = _build_roseplot_figure()
+        user = db.session.get(User, session["user_id"])
+        participant_id = user.participant_id if user else None
+
+        scores = _fetch_participant_scores(participant_id)
+        if scores is None:
+            logger.info(
+                "No GoalIntervention rows for participant_id=%s, using DEMO_SCORES",
+                participant_id,
+            )
+            scores = DEMO_SCORES
+
+        fig_dict = _build_roseplot_figure(scores)
         duration_ms = (time.time() - start) * 1000
         logger.info("Rose plot generated in %.1fms", duration_ms)
         if duration_ms > 500:

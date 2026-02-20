@@ -1,4 +1,5 @@
 import logging
+import secrets
 from datetime import datetime, timezone
 from functools import wraps
 from flask import Blueprint, request, jsonify, session, g
@@ -129,7 +130,7 @@ def register():
 
     # Create user
     try:
-        user = User(username=username, email=email)
+        user = User(username=username, email=email, participant_id=secrets.token_hex(16))
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
@@ -345,6 +346,7 @@ def me():
             "username": user.username,
             "email": user.email,
             "role": user.role,
+            "participant_id": user.participant_id,
             "created_at": user.created_at.isoformat(),
             "last_login": user.last_login.isoformat() if user.last_login else None
         }
