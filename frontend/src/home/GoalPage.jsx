@@ -1,17 +1,90 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 
+const LIKERT = {
+  1: "Strongly disagree", 2: "Disagree", 3: "Somewhat disagree",
+  4: "Neutral", 5: "Somewhat agree", 6: "Agree", 7: "Strongly agree",
+};
+
+const SCORE_COLOR = {
+  1: "#d73027", 2: "#fc8d59", 3: "#fee090", 4: "#aaaaaa",
+  5: "#91bfdb", 6: "#4575b4", 7: "#2166AC",
+};
+
+const TP_LABELS = { T2: "Week 2", T3: "Week 3", T4: "Week 4", T5: "Week 5", T6: "Week 6" };
+
 export default function GoalPage({ user, onLogout }) {
   const { goalId } = useParams();
+  const [goal, setGoal] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/visualizations/goals", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => {
+        const found = (d.goals || []).find((g) => String(g.goal_id) === String(goalId));
+        if (found) setGoal(found);
+        else setError("Goal not found.");
+      })
+      .catch(() => setError("Failed to load goal data."))
+      .finally(() => setLoading(false));
+  }, [goalId]);
 
   return (
-    <HomeLayout user={user} onLogout={onLogout} title={`Goal ${goalId}`}>
+    <HomeLayout user={user} onLogout={onLogout} title={goal ? goal.text : `Goal ${goalId}`}>
       <div style={card}>
-        <p style={muted}>Placeholder for Goal {goalId} details.</p>
-        <div style={{ display: "flex", gap: 12 }}>
-          <Link to="/overview" style={pill}>Go to Overview →</Link>
-          <Link to="/dashboard" style={pill}>Back to Dashboard</Link>
+        {loading && <div style={muted}>Loading…</div>}
+        {error && <div style={{ ...muted, color: "#f87171" }}>{error}</div>}
+
+        {goal && (
+          <>
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Goal</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{goal.text}</div>
+            </div>
+
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>Timepoint</th>
+                  <th style={th}>Progress</th>
+                  <th style={th}>Confidence</th>
+                  <th style={th}>Importance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {["T2", "T3", "T4", "T5", "T6"].map((tp) => {
+                  const scores = goal.timepoints[tp] || {};
+                  return (
+                    <tr key={tp}>
+                      <td style={{ ...td, fontWeight: 700 }}>{TP_LABELS[tp]}</td>
+                      {["Q39", "Q40", "Q41"].map((q) => (
+                        <td key={q} style={td}>
+                          {scores[q] != null ? (
+                            <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                              <span style={{
+                                display: "inline-block", width: 9, height: 9,
+                                borderRadius: "50%", background: SCORE_COLOR[scores[q]], flexShrink: 0,
+                              }} />
+                              {LIKERT[scores[q]]}
+                            </span>
+                          ) : (
+                            <span style={{ opacity: 0.35 }}>—</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        <div style={{ display: "flex", gap: 12, marginTop: 22 }}>
+          <Link to="/dashboard" style={pill}>← Back to Dashboard</Link>
         </div>
       </div>
     </HomeLayout>
@@ -19,7 +92,7 @@ export default function GoalPage({ user, onLogout }) {
 }
 
 const card = {
-  padding: 18,
+  padding: 22,
   borderRadius: 16,
   border: "1px solid rgba(155,183,255,0.16)",
   background: "rgba(16, 25, 42, 0.65)",
@@ -27,13 +100,21 @@ const card = {
   backdropFilter: "blur(8px)",
 };
 const muted = { opacity: 0.82, fontSize: 14, lineHeight: 1.45 };
+const table = { width: "100%", borderCollapse: "collapse", fontSize: 14 };
+const th = {
+  textAlign: "left", padding: "8px 14px",
+  borderBottom: "1px solid rgba(155,183,255,0.2)",
+  opacity: 0.65, fontWeight: 700, fontSize: 12,
+  textTransform: "uppercase", letterSpacing: "0.06em",
+};
+const td = {
+  padding: "11px 14px",
+  borderBottom: "1px solid rgba(155,183,255,0.08)",
+};
 const pill = {
-  padding: "10px 12px",
-  borderRadius: 12,
+  padding: "10px 14px", borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.14)",
   background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)",
-  fontWeight: 800,
-  textDecoration: "none",
-  display: "inline-flex",
+  color: "rgba(233,238,252,0.92)", fontWeight: 800,
+  textDecoration: "none", display: "inline-flex",
 };

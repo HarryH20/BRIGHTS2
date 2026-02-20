@@ -257,6 +257,64 @@ def _build_roseplot_figure(scores):
     return fig.to_dict()
 
 
+@viz_bp.route("/goals")
+@login_required
+def get_goals():
+    """Return per-goal text and T2-T6 scores for the current user."""
+    user = db.session.get(User, session["user_id"])
+    participant_id = user.participant_id if user else None
+
+    if not participant_id:
+        return jsonify({"goals": []})
+
+    try:
+        with db.engine.connect() as conn:
+            result = conn.execute(
+                sqlalchemy.text(
+                    '''
+                    SELECT "GoalID", "GoalT1",
+                           "GT2Q39","GT2Q40","GT2Q41",
+                           "GT3Q39","GT3Q40","GT3Q41",
+                           "GT4Q39","GT4Q40","GT4Q41",
+                           "GT5Q39","GT5Q40","GT5Q41",
+                           "GT6Q39","GT6Q40","GT6Q41"
+                    FROM "GoalIntervention"
+                    WHERE "ID" = :pid
+                      AND "GoalT1" IS NOT NULL
+                      AND TRIM("GoalT1") != \'\'
+                    ORDER BY "GoalID"
+                    '''
+                ),
+                {"pid": participant_id},
+            )
+            rows = result.fetchall()
+    except Exception:
+        logger.error("Failed to fetch goals for participant_id=%s", participant_id, exc_info=True)
+        return jsonify({"error": "Failed to fetch goals"}), 500
+
+    goals_out = []
+    for row in rows:
+        m = row._mapping
+        timepoints = {}
+        for t in range(2, 7):
+            tp = {}
+            for q in ("Q39", "Q40", "Q41"):
+                val = m.get(f"GT{t}{q}")
+                try:
+                    tp[q] = int(val) if val is not None else None
+                except (ValueError, TypeError):
+                    tp[q] = None
+            timepoints[f"T{t}"] = tp
+
+        goals_out.append({
+            "goal_id": int(m["GoalID"]),
+            "text": str(m["GoalT1"]).strip(),
+            "timepoints": timepoints,
+        })
+
+    return jsonify({"goals": goals_out})
+
+
 @viz_bp.route("/roseplot")
 @login_required
 def roseplot():

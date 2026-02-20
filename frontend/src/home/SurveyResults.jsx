@@ -1,15 +1,81 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 
+const LIKERT = {
+  1: "Strongly disagree", 2: "Disagree", 3: "Somewhat disagree",
+  4: "Neutral", 5: "Somewhat agree", 6: "Agree", 7: "Strongly agree",
+};
+
+const SCORE_COLOR = {
+  1: "#d73027", 2: "#fc8d59", 3: "#fee090", 4: "#aaaaaa",
+  5: "#91bfdb", 6: "#4575b4", 7: "#2166AC",
+};
+
+const TP_LABELS = { T2: "Week 2", T3: "Week 3", T4: "Week 4", T5: "Week 5", T6: "Week 6" };
+
 export default function SurveyResults({ user, onLogout }) {
   const { surveyId } = useParams();
+  const tp = surveyId.toUpperCase();
+  const tpLabel = TP_LABELS[tp] || surveyId;
+
+  const [goals, setGoals] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/visualizations/goals", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => setGoals(d.goals || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
-    <HomeLayout user={user} onLogout={onLogout} title={`Survey Results — ${surveyId}`}>
+    <HomeLayout user={user} onLogout={onLogout} title={`${tpLabel} Survey — Results`}>
       <div style={card}>
-        <p style={muted}>Placeholder for responses/results view.</p>
-        <div style={{ display: "flex", gap: 12 }}>
+        {loading ? (
+          <p style={muted}>Loading…</p>
+        ) : goals.length === 0 ? (
+          <p style={muted}>No data available for this survey.</p>
+        ) : (
+          <table style={table}>
+            <thead>
+              <tr>
+                <th style={th}>Goal</th>
+                <th style={th}>Progress</th>
+                <th style={th}>Confidence</th>
+                <th style={th}>Importance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {goals.map((g) => {
+                const scores = g.timepoints[tp] || {};
+                return (
+                  <tr key={g.goal_id}>
+                    <td style={{ ...td, fontWeight: 700 }}>{g.text}</td>
+                    {["Q39", "Q40", "Q41"].map((q) => (
+                      <td key={q} style={td}>
+                        {scores[q] != null ? (
+                          <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                            <span style={{
+                              display: "inline-block", width: 9, height: 9,
+                              borderRadius: "50%", background: SCORE_COLOR[scores[q]], flexShrink: 0,
+                            }} />
+                            {LIKERT[scores[q]]}
+                          </span>
+                        ) : (
+                          <span style={{ opacity: 0.35 }}>—</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
           <Link to={`/surveys/${surveyId}/analysis`} style={pill}>Go to Analysis →</Link>
           <Link to="/dashboard" style={pill}>Back to Dashboard</Link>
         </div>
@@ -19,7 +85,7 @@ export default function SurveyResults({ user, onLogout }) {
 }
 
 const card = {
-  padding: 18,
+  padding: 22,
   borderRadius: 16,
   border: "1px solid rgba(155,183,255,0.16)",
   background: "rgba(16, 25, 42, 0.65)",
@@ -27,13 +93,21 @@ const card = {
   backdropFilter: "blur(8px)",
 };
 const muted = { opacity: 0.82, fontSize: 14, lineHeight: 1.45 };
+const table = { width: "100%", borderCollapse: "collapse", fontSize: 14 };
+const th = {
+  textAlign: "left", padding: "8px 14px",
+  borderBottom: "1px solid rgba(155,183,255,0.2)",
+  opacity: 0.65, fontWeight: 700, fontSize: 12,
+  textTransform: "uppercase", letterSpacing: "0.06em",
+};
+const td = {
+  padding: "11px 14px",
+  borderBottom: "1px solid rgba(155,183,255,0.08)",
+};
 const pill = {
-  padding: "10px 12px",
-  borderRadius: 12,
+  padding: "10px 14px", borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.14)",
   background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)",
-  fontWeight: 800,
-  textDecoration: "none",
-  display: "inline-flex",
+  color: "rgba(233,238,252,0.92)", fontWeight: 800,
+  textDecoration: "none", display: "inline-flex",
 };
