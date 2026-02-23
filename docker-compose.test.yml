@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: brights
+      POSTGRES_PASSWORD: ci_test_password
+      POSTGRES_DB: brights_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brights -d brights_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      FLASK_ENV: testing
+      FLASK_SECRET_KEY: ci-test-key
+      DATABASE_URL: postgresql://brights:ci_test_password@db:5432/brights_test
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://web:5000
+    depends_on:
+      - web
+    ports:
+      - "3000:80"
