@@ -61,7 +61,7 @@ jobs:
         run: docker build -t brights-frontend ./frontend
 
       - name: Build backend image
-        run: docker build -t brights-backend ./backend
+        run: docker build -t brights-backend -f backend/Dockerfile .
 
   # ── Deploy to Azure Container Apps (prod branch only) ────────────
   deploy:
@@ -88,7 +88,7 @@ jobs:
 
       - name: Build and push backend image
         run: |
-          docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/brights-backend:${{ github.sha }} ./backend
+          docker build -f backend/Dockerfile -t ${{ secrets.ACR_NAME }}.azurecr.io/brights-backend:${{ github.sha }} .
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/brights-backend:${{ github.sha }}
 
       - name: Build and push frontend image

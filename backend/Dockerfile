@@ -5,13 +5,14 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash appuser
 
-COPY . .
+COPY backend/ .
+COPY analysis/ ./analysis/
 
 # Create logs directory and set ownership before switching user
 RUN mkdir -p /app/logs && chown -R appuser:appuser /app
