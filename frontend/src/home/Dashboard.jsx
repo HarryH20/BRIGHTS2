@@ -76,7 +76,7 @@ export default function Dashboard({ user, onLogout }) {
 
         {/* Goal Cards */}
         {!loading &&
-          goals.map((g) => {
+          goals.map((g, idx) => {
             const latestTp = TP_ORDER.find((tp) =>
               Object.values(g.timepoints[tp] || {}).some((v) => v !== null)
             );
@@ -86,7 +86,7 @@ export default function Dashboard({ user, onLogout }) {
             return (
               <section key={g.goal_id} style={{ ...styles.card, gridColumn: `span ${colSpan}` }}>
                 <div style={styles.cardHeader}>
-                  <h2 style={styles.h2} title={g.text}>{shortTitle}</h2>
+                  <h2 style={styles.h2} title={g.text}> Goal {idx + 1}: {shortTitle} </h2>
                   <Link to={`/goals/${g.goal_id}`} style={styles.smallLink}>Open →</Link>
                 </div>
 
