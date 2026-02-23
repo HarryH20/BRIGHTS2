@@ -1,7 +1,11 @@
 import os
+import sys
 import time
 import uuid
 import logging
+
+# Allow imports from the root analysis/ package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flask import Flask, g, request, session
 from werkzeug.middleware.proxy_fix import ProxyFix
