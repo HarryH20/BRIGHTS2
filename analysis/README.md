@@ -21,21 +21,26 @@ analysis/sentiment.py       →  GET /api/visualizations/sentiment
 
 ## Every file must have exactly these two functions
 
-### 1. `fetch_data(participant_id, engine)`
+### 1. `fetch_data(participant_id, engine, **kwargs)`
 
 Queries the database and returns whatever data your graph needs.
 Return `None` if the participant has no data — `build_figure` handles
 the empty state.
 
+Any URL query parameters (e.g. `?goal_index=1`) are forwarded automatically
+as `kwargs`, so you can accept optional parameters by naming them explicitly:
+
 ```python
-def fetch_data(participant_id, engine):
+def fetch_data(participant_id, engine, goal_index=0, **kwargs):
     """
-    participant_id : str   — the logged-in user's study ID
+    participant_id : str            — the logged-in user's study ID
     engine         : sqlalchemy Engine — use this to query the DB
+    goal_index     : int (optional) — example of a query param default
 
     Returns your data in whatever shape build_figure expects,
     or None if no data exists for this participant.
     """
+    goal_index = int(goal_index)  # query params arrive as strings, cast as needed
     if not participant_id:
         return None
 

@@ -3,7 +3,7 @@ import logging
 import time
 
 import sqlalchemy
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify, request, session
 from models import db, User
 from routes.auth import login_required
 
@@ -88,7 +88,7 @@ def serve_graph(graph_name):
         user = db.session.get(User, session["user_id"])
         participant_id = user.participant_id if user else None
 
-        data = module.fetch_data(participant_id, db.engine)
+        data = module.fetch_data(participant_id, db.engine, **request.args)
         fig_dict = module.build_figure(data)
 
         duration_ms = (time.time() - start) * 1000
