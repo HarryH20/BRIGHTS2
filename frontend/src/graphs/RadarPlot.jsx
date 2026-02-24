@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
 import Plot from "react-plotly.js";
 
-export default function RadarPlot({ goalIndex = 0 }) {
-  const [figure, setFigure] = useState(null);
+export default function RadarPlot({ goalIndex = 0, figure: prefetchedFigure }) {
+  const [figure, setFigure] = useState(prefetchedFigure ?? null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // If parent prefetched the data, skip the self-fetch
+    if (prefetchedFigure !== undefined) return;
     fetch(`/api/visualizations/radarplot?goal_index=${goalIndex}`, {
       credentials: "include",
     })
@@ -15,7 +17,7 @@ export default function RadarPlot({ goalIndex = 0 }) {
       })
       .then((fig) => setFigure(fig))
       .catch((err) => setError(err.message));
-  }, [goalIndex]);
+  }, [goalIndex]); // eslint-disable-line
 
   if (error) {
     return (

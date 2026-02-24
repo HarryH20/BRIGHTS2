@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import RosePlot from "../graphs/RosePlot.jsx";
 import RadarPlot from "../graphs/RadarPlot.jsx";
+import LoadingScreen from "./LoadingScreen.jsx";
 import HomeLayout from "./HomeLayout.jsx";
 
 const LIKERT = {
@@ -21,14 +22,49 @@ export default function Dashboard({ user, onLogout }) {
   const [goalFilter, setGoalFilter] = useState("all");
   const [weekFilter, setWeekFilter] = useState("2-6");
   const [goals, setGoals] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [roseFigure, setRoseFigure] = useState(null);
+  const [radarFigures, setRadarFigures] = useState({});
+  const [ready, setReady] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState("Loading your goals...");
 
   useEffect(() => {
-    fetch("/api/visualizations/goals", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => setGoals(d.goals || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    // Step 1: fetch goals + roseplot in parallel
+    Promise.allSettled([
+      fetch("/api/visualizations/goals", { credentials: "include" })
+        .then((r) => r.ok ? r.json() : Promise.reject()),
+      fetch("/api/visualizations/roseplot", { credentials: "include" })
+        .then((r) => r.ok ? r.json() : Promise.reject()),
+    ]).then(([goalsResult, roseResult]) => {
+      const fetchedGoals =
+        goalsResult.status === "fulfilled" ? goalsResult.value.goals || [] : [];
+      const rose = roseResult.status === "fulfilled" ? roseResult.value : null;
+
+      if (fetchedGoals.length === 0) {
+        setGoals(fetchedGoals);
+        setRoseFigure(rose);
+        setReady(true);
+        return;
+      }
+
+      // Step 2: fetch a radarplot for each goal
+      setLoadingStatus("Preparing your charts...");
+      Promise.allSettled(
+        fetchedGoals.map((_, idx) =>
+          fetch(`/api/visualizations/radarplot?goal_index=${idx}`, { credentials: "include" })
+            .then((r) => r.ok ? r.json() : Promise.reject())
+            .then((fig) => ({ idx, fig }))
+        )
+      ).then((radarResults) => {
+        const radars = {};
+        radarResults.forEach((r) => {
+          if (r.status === "fulfilled") radars[r.value.idx] = r.value.fig;
+        });
+        setGoals(fetchedGoals);
+        setRoseFigure(rose);
+        setRadarFigures(radars);
+        setReady(true);
+      });
+    });
   }, []);
 
   // Timepoints that have at least one non-null score across any goal
@@ -37,6 +73,8 @@ export default function Dashboard({ user, onLogout }) {
   );
 
   const colSpan = goals.length <= 1 ? 12 : goals.length === 2 ? 6 : 4;
+
+  if (!ready) return <LoadingScreen status={loadingStatus} />;
 
   return (
     <HomeLayout user={user} onLogout={onLogout} title={`Welcome, ${user?.username || "user"}!`}>
@@ -49,9 +87,7 @@ export default function Dashboard({ user, onLogout }) {
           </div>
 
           <div style={styles.recentList}>
-            {loading ? (
-              <div style={styles.muted}>Loading…</div>
-            ) : activeTimepoints.length === 0 ? (
+            {activeTimepoints.length === 0 ? (
               <div style={styles.muted}>No survey data available.</div>
             ) : (
               activeTimepoints.map((tp, i) => (
@@ -76,8 +112,7 @@ export default function Dashboard({ user, onLogout }) {
         </section>
 
         {/* Goal Cards */}
-        {!loading &&
-          goals.map((g, idx) => {
+        {goals.map((g, idx) => {
             const latestTp = TP_ORDER.find((tp) =>
               Object.values(g.timepoints[tp] || {}).some((v) => v !== null)
             );
@@ -122,7 +157,7 @@ export default function Dashboard({ user, onLogout }) {
                 </div>
 
                 <div style={styles.graphBox}>
-                  <RadarPlot goalIndex={idx} />
+                  <RadarPlot figure={radarFigures[idx]} />
                 </div>
               </section>
             );
@@ -159,7 +194,7 @@ export default function Dashboard({ user, onLogout }) {
 
           <div style={styles.overviewBox}>
             <div style={{ width: "100%" }}>
-              <RosePlot goal={goalFilter} weeks={weekFilter} />
+              <RosePlot figure={roseFigure} />
             </div>
           </div>
         </section>

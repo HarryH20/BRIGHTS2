@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
 import Plot from "react-plotly.js";
 
-export default function RosePlot() {
-  const [figure, setFigure] = useState(null);
+export default function RosePlot({ figure: prefetchedFigure }) {
+  const [figure, setFigure] = useState(prefetchedFigure ?? null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    // If parent prefetched the data, skip the self-fetch
+    if (prefetchedFigure !== undefined) return;
     fetch("/api/visualizations/roseplot", { credentials: "include" })
       .then((res) => {
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
@@ -13,7 +15,7 @@ export default function RosePlot() {
       })
       .then((fig) => setFigure(fig))
       .catch((err) => setError(err.message));
-  }, []);
+  }, []); // eslint-disable-line
 
   if (error) {
     return (
