@@ -98,7 +98,9 @@ def fetch_data(participant_id, engine, goal_index=0, **kwargs):
                     vals.append(_reverse_1to7(v) if q in REVERSE_QS else _to_num(v))
             for sp in tdef["special_all"]:
                 vals.append(_to_num(mapping.get(f"GT{t}{sp}")))
-            scores.append({"t_num": t, "trait": trait, "value": _safe_mean(vals)})
+            mean = _safe_mean(vals)
+            # Convert NaN to None — NaN is not valid JSON
+            scores.append({"t_num": t, "trait": trait, "value": None if np.isnan(mean) else mean})
 
     return {
         "goal_id": mapping.get("GoalID"),
@@ -136,7 +138,7 @@ def build_figure(data):
 
     def values_for_time(t):
         vals = [
-            next((r["value"] for r in scores if r["t_num"] == t and r["trait"] == tr), np.nan)
+            next((r["value"] for r in scores if r["t_num"] == t and r["trait"] == tr), None)
             for tr in trait_order
         ]
         return vals + [vals[0]]

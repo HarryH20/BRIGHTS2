@@ -7,6 +7,11 @@ import logging
 # Allow imports from the root analysis/ package
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Pre-load numpy so it is fully initialized before any worker threads
+# handle requests — prevents a race condition where concurrent requests
+# both trigger numpy's first import through plotly simultaneously.
+import numpy as _numpy  # noqa: F401
+
 from flask import Flask, g, request, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
