@@ -57,12 +57,13 @@ def fetch_data(participant_id, engine, goal_index=0, **kwargs):
 
     goal_index = int(goal_index)
 
-    q_nums = sorted(
-        {q for tdef in TRAITS.values() for q in tdef["qs_all"] + tdef["qs_t2p"]}
-    )
+    qs_all_nums = sorted({q for tdef in TRAITS.values() for q in tdef["qs_all"]})
+    qs_t2p_nums = sorted({q for tdef in TRAITS.values() for q in tdef["qs_t2p"]})
 
     select_cols = ['"ID"', '"GoalID"', '"GoalT1"']
     for t in TIMEPOINTS:
+        # qs_t2p columns only exist from T2 onwards
+        q_nums = qs_all_nums if t == 1 else sorted(set(qs_all_nums) | set(qs_t2p_nums))
         for q in q_nums:
             select_cols.append(f'"GT{t}Q{q}"')
         select_cols.append(f'"GT{t}Fusion"')
