@@ -3,7 +3,6 @@ from collections import defaultdict
 import numpy as np
 import sqlalchemy
 import plotly.graph_objects as go
-import plotly.express as px
 
 REVERSE_QS = {14, 15, 20, 21, 22, 26, 27, 28, 29, 30, 31, 32, 33}
 
@@ -142,8 +141,8 @@ def build_figure(data):
         ]
         return vals + [vals[0]]
 
-    palette = px.colors.qualitative.Bold
-    base_hex, cmp_hex = palette[0], palette[1]
+    base_hex = "#4f7cff"   # blue  — matches app accent colour
+    cmp_hex  = "#fc8d59"   # orange — matches app score palette
 
     fig = go.Figure()
 
