@@ -79,9 +79,12 @@ def serve_graph(graph_name):
     """
     try:
         module = importlib.import_module(f"analysis.{graph_name}")
-    except ModuleNotFoundError:
-        logger.warning("Graph module not found: analysis.%s", graph_name)
-        return jsonify({"error": "Graph not found"}), 404
+    except ModuleNotFoundError as e:
+        if f"analysis.{graph_name}" in str(e):
+            logger.warning("Graph module not found: analysis.%s", graph_name)
+            return jsonify({"error": "Graph not found"}), 404
+        logger.error("Missing dependency in analysis.%s: %s", graph_name, e)
+        return jsonify({"error": "Graph failed to load due to missing dependency"}), 500
 
     start = time.time()
     try:
