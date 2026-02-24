@@ -40,7 +40,9 @@ services:
 
   # Backend API (accessed via frontend proxy, not directly)
   web:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "5000:5000"
     environment:
