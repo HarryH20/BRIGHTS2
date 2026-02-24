@@ -38,7 +38,7 @@ export default function LoadingScreen({ status = "Loading..." }) {
           </div>
 
           {/* Branding */}
-          <h1 style={styles.title}>BRIGHTS²</h1>
+          <h1 style={styles.title}>BRIGHTS</h1>
 
           {/* Status line */}
           <p style={styles.status}>{status}</p>
