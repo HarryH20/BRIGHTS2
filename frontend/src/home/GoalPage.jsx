@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
+import RadarPlot from "../graphs/RadarPlot.jsx";
 
 const LIKERT = {
   1: "Strongly disagree", 2: "Disagree", 3: "Somewhat disagree",
@@ -17,6 +18,7 @@ const TP_LABELS = { T2: "Week 2", T3: "Week 3", T4: "Week 4", T5: "Week 5", T6: 
 export default function GoalPage({ user, onLogout }) {
   const { goalId } = useParams();
   const [goal, setGoal] = useState(null);
+  const [goalIndex, setGoalIndex] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -24,9 +26,14 @@ export default function GoalPage({ user, onLogout }) {
     fetch("/api/visualizations/goals", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => {
-        const found = (d.goals || []).find((g) => String(g.goal_id) === String(goalId));
-        if (found) setGoal(found);
-        else setError("Goal not found.");
+        const goals = d.goals || [];
+        const idx = goals.findIndex((g) => String(g.goal_id) === String(goalId));
+        if (idx !== -1) {
+          setGoal(goals[idx]);
+          setGoalIndex(idx);
+        } else {
+          setError("Goal not found.");
+        }
       })
       .catch(() => setError("Failed to load goal data."))
       .finally(() => setLoading(false));
@@ -81,6 +88,17 @@ export default function GoalPage({ user, onLogout }) {
               </tbody>
             </table>
           </>
+        )}
+
+        {goalIndex !== null && (
+          <div style={{ marginTop: 22 }}>
+            <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Goal Traits Radar
+            </div>
+            <div style={{ borderRadius: 12, border: "1px solid rgba(155,183,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
+              <RadarPlot goalIndex={goalIndex} />
+            </div>
+          </div>
         )}
 
         <div style={{ display: "flex", gap: 12, marginTop: 22 }}>
