@@ -222,7 +222,6 @@ const styles = {
     marginTop: 12, borderRadius: 12,
     border: "1px solid rgba(155,183,255,0.12)",
     background: "rgba(255,255,255,0.03)",
-    overflow: "hidden",
   },
 
   filtersRow: {

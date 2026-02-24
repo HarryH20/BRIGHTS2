@@ -41,7 +41,7 @@ export default function RadarPlot({ goalIndex = 0 }) {
     height: 500,
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
-    margin: { t: 80, l: 40, r: 40, b: 60 },
+    margin: { t: 80, l: 80, r: 80, b: 80 },
   };
 
   return (
