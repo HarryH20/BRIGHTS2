@@ -120,7 +120,7 @@ export default function Dashboard({ user, onLogout }) {
             const shortTitle = g.text.length > 28 ? g.text.slice(0, 28) + "…" : g.text;
 
             return (
-              <section key={g.goal_id} style={{ ...styles.card, gridColumn: `span ${colSpan}` }}>
+              <section key={g.goal_id} className="card-interactive" style={{ ...styles.card, gridColumn: `span ${colSpan}` }}>
                 <div style={styles.cardHeader}>
                   <h2 style={styles.h2} title={g.text}> Goal {idx + 1}: {shortTitle} </h2>
                   <Link to={`/goals/${g.goal_id}`} style={styles.smallLink}>Open →</Link>
