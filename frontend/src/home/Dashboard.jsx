@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import RosePlot from "../graphs/RosePlot.jsx";
+import RadarPlot from "../graphs/RadarPlot.jsx";
 import HomeLayout from "./HomeLayout.jsx";
 
 const LIKERT = {
@@ -121,7 +122,7 @@ export default function Dashboard({ user, onLogout }) {
                 </div>
 
                 <div style={styles.graphBox}>
-                  <div style={styles.muted}>[graph placeholder]</div>
+                  <RadarPlot goalIndex={idx} />
                 </div>
               </section>
             );
@@ -218,10 +219,10 @@ const styles = {
   summaryTitle: { fontWeight: 800, marginBottom: 6 },
 
   graphBox: {
-    marginTop: 12, height: 140, borderRadius: 12,
+    marginTop: 12, borderRadius: 12,
     border: "1px solid rgba(155,183,255,0.12)",
     background: "rgba(255,255,255,0.03)",
-    display: "grid", placeItems: "center",
+    overflow: "hidden",
   },
 
   filtersRow: {
