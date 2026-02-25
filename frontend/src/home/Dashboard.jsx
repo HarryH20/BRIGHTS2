@@ -78,7 +78,7 @@ export default function Dashboard({ user, onLogout }) {
 
   return (
     <HomeLayout user={user} onLogout={onLogout} title={`Welcome, ${user?.username || "user"}!`}>
-      <div style={styles.grid}>
+      <div style={styles.grid} className="grid12">
 
         {/* Latest / Most Recent */}
         <section style={{ ...styles.card, gridColumn: "1 / -1" }}>
@@ -91,13 +91,13 @@ export default function Dashboard({ user, onLogout }) {
               <div style={styles.muted}>No survey data available.</div>
             ) : (
               activeTimepoints.map((tp, i) => (
-                <div key={tp} style={styles.recentRow}>
+                <div key={tp} style={styles.recentRow} className="recentRowMobile">
                   <div style={styles.recentName}>
                     {i === 0
                       ? `Latest Survey (${TP_LABELS[tp]})`
                       : `${TP_LABELS[tp]} Survey`}
                   </div>
-                  <div style={styles.recentLinks}>
+                  <div style={styles.recentLinks} className={"recentLinksMobile"}>
                     <Link style={styles.linkBtn} to={`/surveys/${tp.toLowerCase()}/results`}>
                       Responses / Results
                     </Link>
@@ -170,7 +170,7 @@ export default function Dashboard({ user, onLogout }) {
             <Link to="/overview" style={styles.smallLink}>Open →</Link>
           </div>
 
-          <div style={styles.filtersRow}>
+          <div style={styles.filtersRow} className="filtersRowMobile">
             <div style={styles.muted}>filter by goal(s), week(s):</div>
 
             <select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} style={styles.select}>
@@ -205,7 +205,7 @@ export default function Dashboard({ user, onLogout }) {
 }
 
 const styles = {
-  grid: { display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 16 },
+  grid: { display: "grid", gap: 16 },
   card: {
     padding: 18,
     borderRadius: 16,
