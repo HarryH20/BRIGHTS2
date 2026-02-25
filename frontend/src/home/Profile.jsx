@@ -142,17 +142,15 @@ export default function Profile({ user, onLogout }) {
           </div>
         </section>
 
-        {/* Phone Number Placeholder */}
+        {/* Display Name Placeholder */}
         <section style={styles.section}>
-          <h2 style={styles.h2}>Phone Number</h2>
+          <h2 style={styles.h2}>Display Name</h2>
 
           <div style={styles.field}>
-            <label style={styles.label}>Phone</label>
             <input
               type="text"
-              placeholder="Add phone number (coming soon)"
+              placeholder="Add the name displayed on your profile"
               style={styles.input}
-              disabled
             />
           </div>
         </section>
