@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 
@@ -42,6 +42,8 @@ export default function SurveyAnalysis({ user, onLogout }) {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const [goalFilter, setGoalFilter] = useState("2");
+  const subtitle = useMemo(() => `Filters: Goal ${goalFilter}`, [goalFilter]);
   useEffect(() => {
     fetch("/api/visualizations/goals", { credentials: "include" })
       .then((r) => r.json())
@@ -53,6 +55,18 @@ export default function SurveyAnalysis({ user, onLogout }) {
   return (
     <HomeLayout user={user} onLogout={onLogout} title={`${tpLabel} Survey — Analysis`}>
       <div style={card}>
+        {/* Filter bar: Goal only */}
+        <div style={row}>
+          <label style={label}>
+            Goal
+            <select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} style={select}>
+              <option value="1">Goal 1</option>
+              <option value="2">Goal 2</option>
+              <option value="3">Goal 3</option>
+            </select>
+          </label>
+        </div>
+
         {!loading && !isT2 && (
           <div style={{ marginBottom: 16, fontSize: 13, opacity: 0.7 }}>
             Showing change from Week 2 (baseline) → {tpLabel}.
@@ -63,7 +77,7 @@ export default function SurveyAnalysis({ user, onLogout }) {
         {loading ? (
           <p style={muted}>Loading…</p>
         ) : goals.length === 0 ? (
-          <p style={muted}>No data available for this survey.</p>
+          <p style={muted}>No data available for this survey (with current goal filter).</p>
         ) : (
           <table style={table}>
             <thead>
@@ -106,8 +120,8 @@ export default function SurveyAnalysis({ user, onLogout }) {
         )}
 
         <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
-          <Link to={`/surveys/${surveyId}/results`} style={pill}>Go to Results →</Link>
-          <Link to="/dashboard" style={pill}>Back to Dashboard</Link>
+          <Link to={`/surveys/${surveyId}/results`} style={pillLink}>Go to Results →</Link>
+          <Link to="/dashboard" style={pillLink}>Back to Dashboard</Link>
         </div>
       </div>
     </HomeLayout>
@@ -122,6 +136,35 @@ const card = {
   boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
   backdropFilter: "blur(8px)",
 };
+
+const row = { display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 };
+const label = { display: "grid", gap: 6, fontWeight: 800, fontSize: 13, opacity: 0.92 };
+const select = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.06)",
+  color: "rgba(233,238,252,0.92)",
+  outline: "none",
+};
+const pillBtn = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.06)",
+  color: "rgba(233,238,252,0.92)",
+  fontWeight: 900,
+  textDecoration: "none",
+};
+const pill = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  border: "1px solid rgba(255,255,255,0.14)",
+  background: "rgba(255,255,255,0.06)",
+  color: "rgba(233,238,252,0.85)",
+};
+
 const muted = { opacity: 0.82, fontSize: 14, lineHeight: 1.45 };
 const table = { width: "100%", borderCollapse: "collapse", fontSize: 14 };
 const th = {
@@ -130,11 +173,9 @@ const th = {
   opacity: 0.65, fontWeight: 700, fontSize: 12,
   textTransform: "uppercase", letterSpacing: "0.06em",
 };
-const td = {
-  padding: "11px 14px",
-  borderBottom: "1px solid rgba(155,183,255,0.08)",
-};
-const pill = {
+const td = { padding: "11px 14px", borderBottom: "1px solid rgba(155,183,255,0.08)" };
+
+const pillLink = {
   padding: "10px 14px", borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.14)",
   background: "rgba(255,255,255,0.06)",
