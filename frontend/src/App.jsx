@@ -9,6 +9,7 @@ import SurveyResults from "./home/SurveyResults.jsx";
 import SurveyAnalysis from "./home/SurveyAnalysis.jsx";
 import GoalPage from "./home/GoalPage.jsx";
 import OverviewPage from "./home/OverviewPage.jsx";
+import GraphsPage from "./home/GraphsPage.jsx";
 
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
@@ -142,6 +143,14 @@ export default function App() {
           </RequireAuth>
         }
       />
+        <Route
+    path="/graphs"
+    element={
+        <RequireAuth user={user} checking={checking}>
+            <GraphsPage user={user} onLogout={handleLogout} />
+        </RequireAuth>
+        }
+    />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

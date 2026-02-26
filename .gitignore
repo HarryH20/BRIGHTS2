@@ -29,7 +29,6 @@ docs/
 # Data files
 data/
 package-lock.json
-
 # Node.js
 node_modules/
 frontend/node_modules/
