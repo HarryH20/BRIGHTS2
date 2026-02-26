@@ -84,11 +84,15 @@ export default function Dashboard({ user, onLogout }) {
         <section style={{ ...styles.card, gridColumn: "1 / -1" }}>
           <div style={styles.cardHeader}>
             <h2 style={styles.h2}>Latest / Most Recent</h2>
+
+            <Link to="/graphs" style={styles.primaryBtn}>
+              View Survey Graphs
+            </Link>
           </div>
 
           <div style={styles.recentList}>
             {activeTimepoints.length === 0 ? (
-              <div style={styles.muted}>No survey data available.</div>
+                <div style={styles.muted}>No survey data available.</div>
             ) : (
               activeTimepoints.map((tp, i) => (
                 <div key={tp} style={styles.recentRow}>
@@ -235,6 +239,16 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.14)",
     background: "rgba(255,255,255,0.06)",
   },
+  primaryBtn: {
+  textDecoration: "none",
+  color: "white",
+  fontWeight: 800,
+  padding: "8px 12px",
+  borderRadius: 12,
+  border: "1px solid rgba(37,99,235,0.65)",
+  background: "rgba(37,99,235,0.85)",
+  boxShadow: "0 10px 22px rgba(37,99,235,0.18)",
+},
 
   recentList: { display: "grid", gap: 10 },
   recentRow: {
