@@ -20,7 +20,7 @@ function DeltaCell({ from, to }) {
   const arrow = d > 0 ? "↑" : d < 0 ? "↓" : "→";
   const color = d > 0 ? "#4ade80" : d < 0 ? "#f87171" : "#aaaaaa";
   return (
-    <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+    <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
       <span style={{
         display: "inline-block", width: 9, height: 9,
         borderRadius: "50%", background: SCORE_COLOR[to], flexShrink: 0,
@@ -29,6 +29,25 @@ function DeltaCell({ from, to }) {
       <span style={{ color, fontWeight: 700, fontSize: 13 }}>
         {arrow}{Math.abs(d) > 0 ? ` ${Math.abs(d)}` : ""}
       </span>
+    </span>
+  );
+}
+
+function ScoreCell({ value }) {
+  if (value == null) return <span style={{ opacity: 0.35 }}>—</span>;
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+      <span
+        style={{
+          display: "inline-block",
+          width: 9,
+          height: 9,
+          borderRadius: "50%",
+          background: SCORE_COLOR[value],
+          flexShrink: 0,
+        }}
+      />
+      <span>{LIKERT[value]}</span>
     </span>
   );
 }
@@ -52,11 +71,13 @@ export default function SurveyAnalysis({ user, onLogout }) {
       .finally(() => setLoading(false));
   }, []);
 
+  void subtitle;
+
   return (
     <HomeLayout user={user} onLogout={onLogout} title={`${tpLabel} Survey — Analysis`}>
       <div style={card}>
         {/* Filter bar: Goal only */}
-        <div style={row}>
+        <div style={row} className="filtersRowMobile">
           <label style={label}>
             Goal
             <select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} style={select}>
@@ -79,7 +100,7 @@ export default function SurveyAnalysis({ user, onLogout }) {
         ) : goals.length === 0 ? (
           <p style={muted}>No data available for this survey (with current goal filter).</p>
         ) : (
-          <table style={table}>
+          <table style={table} className="analysisTable">
             <thead>
               <tr>
                 <th style={th}>Goal</th>
@@ -94,24 +115,21 @@ export default function SurveyAnalysis({ user, onLogout }) {
                 const baseline = g.timepoints["T2"] || {};
                 return (
                   <tr key={g.goal_id}>
-                    <td style={{ ...td, fontWeight: 700 }}>{g.text}</td>
-                    {["Q39", "Q40", "Q41"].map((q) => (
-                      <td key={q} style={td}>
-                        {isT2 ? (
-                          current[q] != null ? (
-                            <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                              <span style={{
-                                display: "inline-block", width: 9, height: 9,
-                                borderRadius: "50%", background: SCORE_COLOR[current[q]], flexShrink: 0,
-                              }} />
-                              {LIKERT[current[q]]}
-                            </span>
-                          ) : <span style={{ opacity: 0.35 }}>—</span>
-                        ) : (
-                          <DeltaCell from={baseline[q]} to={current[q]} />
-                        )}
-                      </td>
-                    ))}
+                    <td style={{ ...td, fontWeight: 800 }} data-label="Goal">
+                      {g.text}
+                    </td>
+
+                    <td style={td} data-label="Progress">
+                      {isT2 ? <ScoreCell value={current.Q39} /> : <DeltaCell from={baseline.Q39} to={current.Q39} />}
+                    </td>
+
+                    <td style={td} data-label="Confidence">
+                      {isT2 ? <ScoreCell value={current.Q40} /> : <DeltaCell from={baseline.Q40} to={current.Q40} />}
+                    </td>
+
+                    <td style={td} data-label="Importance">
+                      {isT2 ? <ScoreCell value={current.Q41} /> : <DeltaCell from={baseline.Q41} to={current.Q41} />}
+                    </td>
                   </tr>
                 );
               })}
@@ -119,9 +137,13 @@ export default function SurveyAnalysis({ user, onLogout }) {
           </table>
         )}
 
-        <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
-          <Link to={`/surveys/${surveyId}/results`} style={pillLink}>Go to Results →</Link>
-          <Link to="/dashboard" style={pillLink}>Back to Dashboard</Link>
+        <div style={{ display: "flex", gap: 12, marginTop: 18, flexWrap: "wrap" }}>
+          <Link to={`/surveys/${surveyId}/results`} style={pillLink} className="tapTarget">
+            Go to Results →
+          </Link>
+          <Link to="/dashboard" style={pillLink} className="tapTarget">
+            Back to Dashboard
+          </Link>
         </div>
       </div>
     </HomeLayout>
@@ -147,23 +169,6 @@ const select = {
   color: "rgba(233,238,252,0.92)",
   outline: "none",
 };
-const pillBtn = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)",
-  fontWeight: 900,
-  textDecoration: "none",
-};
-const pill = {
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.85)",
-};
 
 const muted = { opacity: 0.82, fontSize: 14, lineHeight: 1.45 };
 const table = { width: "100%", borderCollapse: "collapse", fontSize: 14 };
@@ -181,4 +186,5 @@ const pillLink = {
   background: "rgba(255,255,255,0.06)",
   color: "rgba(233,238,252,0.92)", fontWeight: 800,
   textDecoration: "none", display: "inline-flex",
+  alignItems: "center",
 };
