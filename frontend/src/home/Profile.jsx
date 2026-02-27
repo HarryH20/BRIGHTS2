@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 
-export default function Profile({ user, onLogout }) {
+export default function Profile({ user, onLogout, onUserUpdate }) {
   // ---------- change password ----------
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -39,6 +39,38 @@ export default function Profile({ user, onLogout }) {
       }
     } catch {
       setPwMsg({ ok: false, text: "Network error. Please try again." });
+    }
+  }
+
+  // ---------- display name ----------
+  const [displayName, setDisplayName] = useState(user?.display_name || "");
+  const [displayNameMsg, setDisplayNameMsg] = useState(null); // { ok: bool, text: string }
+
+  async function handleDisplayNameSubmit(e) {
+    e.preventDefault();
+    setDisplayNameMsg(null);
+
+    if (!displayName.trim()) {
+      setDisplayNameMsg({ ok: false, text: "Display name cannot be empty." });
+      return;
+    }
+
+    try {
+      const res = await fetch("/auth/display-name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_name: displayName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDisplayNameMsg({ ok: false, text: data.error || "Update failed." });
+      } else {
+        setDisplayNameMsg({ ok: true, text: "Display name updated." });
+        setDisplayName(data.display_name);
+        onUserUpdate?.({ display_name: data.display_name });
+      }
+    } catch {
+      setDisplayNameMsg({ ok: false, text: "Network error. Please try again." });
     }
   }
 
@@ -142,17 +174,32 @@ export default function Profile({ user, onLogout }) {
           </div>
         </section>
 
-        {/* Display Name Placeholder */}
+        {/* Display Name */}
         <section style={styles.section}>
           <h2 style={styles.h2}>Display Name</h2>
 
-          <div style={styles.field}>
-            <input
-              type="text"
-              placeholder="Add the name displayed on your profile"
-              style={styles.input}
-            />
-          </div>
+          <form onSubmit={handleDisplayNameSubmit}>
+            <div style={styles.field}>
+              <input
+                type="text"
+                placeholder="Add the name displayed on your dashboard"
+                style={styles.input}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                maxLength={100}
+              />
+            </div>
+
+            {displayNameMsg && (
+              <div style={{ ...styles.msg, color: displayNameMsg.ok ? "#4ade80" : "#f87171", marginBottom: 10 }}>
+                {displayNameMsg.text}
+              </div>
+            )}
+
+            <button type="submit" style={{ ...styles.button, cursor: "pointer" }}>
+              Save Display Name
+            </button>
+          </form>
         </section>
 
         {/* Change Password */}

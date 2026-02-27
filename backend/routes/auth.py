@@ -350,6 +350,7 @@ def me():
             "role": user.role,
             "participant_id": user.participant_id,
             "avatar_url": user.avatar_url,
+            "display_name": user.display_name,
             "created_at": user.created_at.isoformat(),
             "last_login": user.last_login.isoformat() if user.last_login else None
         }
@@ -398,6 +399,43 @@ def change_password():
     _audit(AuditLog.PASSWORD_CHANGE, user_id=user.id)
 
     return jsonify({"message": "Password changed successfully"}), 200
+
+
+@auth_bp.route("/display-name", methods=["POST"])
+@login_required
+def update_display_name():
+    """
+    Set or update the display name for the authenticated user.
+
+    POST /auth/display-name
+    Body: {"display_name": "..."}
+    """
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Request body required"}), 400
+
+    display_name = data.get("display_name", "").strip()
+
+    if not display_name:
+        return jsonify({"error": "Display name cannot be empty"}), 400
+
+    if len(display_name) > 100:
+        return jsonify({"error": "Display name must be 100 characters or fewer"}), 400
+
+    user = db.session.get(User, session["user_id"])
+
+    try:
+        user.display_name = display_name
+        db.session.commit()
+    except Exception:
+        logger.error("Display name update failed for user=%s", user.id, exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Failed to update display name"}), 500
+
+    logger.info("Display name updated: user=%s", user.id)
+
+    return jsonify({"display_name": user.display_name}), 200
 
 
 ALLOWED_AVATAR_EXTS = {"jpg", "jpeg", "png", "gif", "webp"}

@@ -77,7 +77,7 @@ export default function Dashboard({ user, onLogout }) {
   if (!ready) return <LoadingScreen status={loadingStatus} />;
 
   return (
-    <HomeLayout user={user} onLogout={onLogout} title={`Welcome, ${user?.username || "user"}!`}>
+    <HomeLayout user={user} onLogout={onLogout} title={`Welcome, ${user?.display_name || user?.username || "user"}!`}>
       <div style={styles.grid}>
 
         {/* Latest / Most Recent */}
