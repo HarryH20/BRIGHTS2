@@ -5,9 +5,16 @@ export default function RosePlot({ figure: prefetchedFigure }) {
   const [figure, setFigure] = useState(prefetchedFigure ?? null);
   const [error, setError] = useState(null);
 
+  // ✅ If parent passes a new figure (filters changed), update the plot
   useEffect(() => {
-    // If parent prefetched the data, skip the self-fetch
+    setFigure(prefetchedFigure ?? null);
+    setError(null);
+  }, [prefetchedFigure]);
+
+  // ✅ Only self-fetch when parent did NOT provide a figure prop at all
+  useEffect(() => {
     if (prefetchedFigure !== undefined) return;
+
     fetch("/api/visualizations/roseplot", { credentials: "include" })
       .then((res) => {
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
@@ -15,7 +22,7 @@ export default function RosePlot({ figure: prefetchedFigure }) {
       })
       .then((fig) => setFigure(fig))
       .catch((err) => setError(err.message));
-  }, []); // eslint-disable-line
+  }, [prefetchedFigure]);
 
   if (error) {
     return (

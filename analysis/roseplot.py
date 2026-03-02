@@ -31,68 +31,125 @@ QUESTION_LABELS = {
 }
 
 
-def fetch_data(participant_id, engine):
-    """
-    Query GoalIntervention for the given participant_id.
+def _parse_int(x, default=None):
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        return default
 
-    Returns a scores dict shaped as:
-        {
-            2: {"Q39": int, "Q40": int, "Q41": int},
-            3: {...},
-            ...
-            6: {...},
-        }
-    Values are averaged across all of the participant's goals at each timepoint.
-    Returns None if the participant has no GoalIntervention rows.
+
+def _parse_weeks(weeks):
+    """
+    Accepts: None, "all", "2-6", "4-6", "5-6", "2", etc.
+    Returns: sorted list of ints within [2..6] because your DB columns are GT2..GT6.
+    """
+    if weeks is None:
+        return [2, 3, 4, 5, 6]
+
+    s = str(weeks).strip().lower()
+    if s == "" or s == "all":
+        return [2, 3, 4, 5, 6]
+
+    if "-" in s:
+        a, b = s.split("-", 1)
+        a = _parse_int(a)
+        b = _parse_int(b)
+        if a is None or b is None:
+            return [2, 3, 4, 5, 6]
+        lo, hi = (a, b) if a <= b else (b, a)
+        return [t for t in range(lo, hi + 1) if 2 <= t <= 6]
+
+    one = _parse_int(s)
+    if one is None:
+        return [2, 3, 4, 5, 6]
+    return [one] if 2 <= one <= 6 else [2, 3, 4, 5, 6]
+
+
+def fetch_data(participant_id, engine, goal_id=None, weeks=None, **_ignored):
+    """
+    Query GoalIntervention for the given participant_id with optional filters.
+
+    Query params supported (via serve_graph passing **request.args):
+      - goal_id: a specific GoalID (string/int). If missing or "all", uses all goals.
+      - weeks: e.g. "2-6", "4-6", "5-6", "all". If missing, defaults to 2-6.
+
+    Returns:
+      {
+        "scores": {
+          2: {"Q39": int|None, "Q40": int|None, "Q41": int|None},
+          ...
+          6: {"Q39": int|None, "Q40": int|None, "Q41": int|None},
+        },
+        "selected_weeks": [2,3,4,5,6],
+        "goal_id": int|None
+      }
+
+    Scores are averaged across the selected goals for each selected week.
+    Weeks not selected are returned as None so build_figure keeps its 6x3 grid stable.
     """
     if not participant_id:
         return None
 
+    selected_weeks = _parse_weeks(weeks)
+
+    goal_id_str = None
+    if goal_id not in (None, "", "all"):
+        goal_id_str = str(goal_id).strip()
+
     with engine.connect() as conn:
-        result = conn.execute(
-            sqlalchemy.text(
-                """
-                SELECT "GoalID", "GoalT1",
-                       "GT2Q39","GT2Q40","GT2Q41",
-                       "GT3Q39","GT3Q40","GT3Q41",
-                       "GT4Q39","GT4Q40","GT4Q41",
-                       "GT5Q39","GT5Q40","GT5Q41",
-                       "GT6Q39","GT6Q40","GT6Q41"
-                FROM "GoalIntervention"
-                WHERE "ID" = :pid
-                  AND "GoalT1" IS NOT NULL
-                  AND TRIM("GoalT1") != ''
-                ORDER BY "GoalID"
-                """
-            ),
-            {"pid": participant_id},
-        )
-        rows = result.fetchall()
+        sql = """
+            SELECT "GoalID", "GoalT1",
+                   "GT2Q39","GT2Q40","GT2Q41",
+                   "GT3Q39","GT3Q40","GT3Q41",
+                   "GT4Q39","GT4Q40","GT4Q41",
+                   "GT5Q39","GT5Q40","GT5Q41",
+                   "GT6Q39","GT6Q40","GT6Q41"
+            FROM "GoalIntervention"
+            WHERE "ID" = :pid
+              AND "GoalT1" IS NOT NULL
+              AND TRIM("GoalT1") != ''
+        """
+        params = {"pid": participant_id}
+
+        if goal_id_str is not None:
+            sql += ' AND "GoalID" = :gid'
+            params["gid"] = goal_id_str
+
+        sql += ' ORDER BY "GoalID"'
+
+        rows = conn.execute(sqlalchemy.text(sql), params).fetchall()
 
     if not rows:
         return None
 
     totals = defaultdict(lambda: defaultdict(list))
+
+    # Only accumulate values for selected weeks (T2..T6)
     for row in rows:
-        mapping = row._mapping
-        for t in range(2, 7):
+        m = row._mapping
+        for t in selected_weeks:
             for q in ("Q39", "Q40", "Q41"):
                 col = f"GT{t}{q}"
-                val = mapping.get(col)
-                if val is not None:
-                    try:
-                        totals[t][q].append(int(val))
-                    except (ValueError, TypeError):
-                        pass
+                val = m.get(col)
+                if val is None:
+                    continue
+                try:
+                    totals[t][q].append(int(val))
+                except (ValueError, TypeError):
+                    pass
 
+    # Always return T2..T6 keys so the plot grid doesn't change shape
     scores = {}
     for t in range(2, 7):
         scores[t] = {}
         for q in ("Q39", "Q40", "Q41"):
+            if t not in selected_weeks:
+                scores[t][q] = None
+                continue
             vals = totals[t][q]
             scores[t][q] = round(sum(vals) / len(vals)) if vals else None
 
-    return scores
+    return {"scores": scores, "selected_weeks": selected_weeks, "goal_id": goal_id_str}
 
 
 def _score_to_angle(score):
@@ -102,7 +159,12 @@ def _score_to_angle(score):
 def build_figure(data):
     """
     Build the 6x3 rose plot grid as a Plotly figure dict.
-    Returns an empty figure with a message if data is None or empty.
+
+    Layout:
+      Rows 1-5: T2..T6 per question
+      Row 6: distribution summary across *selected* weeks
+
+    Returns an empty figure with a message if data is None/empty.
     """
     if not data:
         fig = go.Figure()
@@ -118,12 +180,20 @@ def build_figure(data):
         )
         return fig.to_dict()
 
+    # Backwards-compatible: allow old shape {2:{...},...} too
+    if isinstance(data, dict) and "scores" in data:
+        scores = data["scores"]
+        selected_weeks = data.get("selected_weeks", [2, 3, 4, 5, 6])
+    else:
+        scores = data
+        selected_weeks = [2, 3, 4, 5, 6]
+
     subplot_titles = []
     for t in range(2, 7):
         for q_label in QUESTION_LABELS.values():
             subplot_titles.append(f"<b>T{t}: {q_label}</b>")
     for q_label in QUESTION_LABELS.values():
-        subplot_titles.append(f"<b>All T2-T6: {q_label}</b>")
+        subplot_titles.append(f"<b>Selected weeks: {q_label}</b>")
 
     fig = make_subplots(
         rows=6,
@@ -136,8 +206,8 @@ def build_figure(data):
 
     # Rows 1-5: one bar per timepoint per question
     for row_idx, t in enumerate(range(2, 7), start=1):
-        for col_idx, (q_key, q_label) in enumerate(QUESTION_LABELS.items(), start=1):
-            score = data[t].get(q_key)
+        for col_idx, (q_key, _) in enumerate(QUESTION_LABELS.items(), start=1):
+            score = (scores.get(t) or {}).get(q_key)
             if score is None:
                 continue
             fig.add_trace(
@@ -158,13 +228,16 @@ def build_figure(data):
                 col=col_idx,
             )
 
-    # Row 6: summary distribution across T2-T6
+    # Row 6: summary distribution across *selected* weeks
     for col_idx, (q_key, _) in enumerate(QUESTION_LABELS.items(), start=1):
         timepoint_scores = [
-            data[t][q_key] for t in range(2, 7) if data[t].get(q_key) is not None
+            (scores.get(t) or {}).get(q_key)
+            for t in selected_weeks
+            if (scores.get(t) or {}).get(q_key) is not None
         ]
         if not timepoint_scores:
             continue
+
         counts = Counter(timepoint_scores)
         max_count = max(counts.values())
         for score, count in counts.items():
@@ -243,12 +316,10 @@ def build_figure(data):
         margin=dict(t=120, l=60, r=60, b=60),
     )
 
-    for annotation in fig["layout"]["annotations"]:
-        if any(
-            kw in annotation["text"]
-            for kw in ["T2:", "T3:", "T4:", "T5:", "T6:", "All T2-T6:"]
-        ):
-            annotation["y"] = annotation["y"] - 0.095
-            annotation["font"] = dict(color="#c8d6f0", size=12)
+    for annotation in (fig.layout.annotations or []):
+        text = getattr(annotation, "text", "") or ""
+        if any(kw in text for kw in ["T2:", "T3:", "T4:", "T5:", "T6:", "Selected weeks:"]):
+            annotation.y = (annotation.y or 0) - 0.095
+            annotation.font = dict(color="#c8d6f0", size=12)
 
     return fig.to_dict()
