@@ -114,3 +114,55 @@ class SessionLog(db.Model):
 
     def __repr__(self):
         return f"<SessionLog user={self.user_id} login={self.login_at}>"
+
+
+class SurveyQuestion(db.Model):
+    """Admin-editable question bank. Questions are never deleted — only deactivated."""
+
+    __tablename__ = "survey_questions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    # t1, t2, t3t5, t6  (t3-t5 share the same question set)
+    form_type = db.Column(db.String(10), nullable=False, index=True)
+    question_number = db.Column(db.Integer, nullable=False)
+    question_text = db.Column(db.Text, nullable=False)
+    # likert7, likert5, open_text, slider100
+    scale_type = db.Column(db.String(20), nullable=False, default="likert7")
+    status = db.Column(db.String(10), nullable=False, default="active", index=True)  # active | inactive
+    display_order = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    def __repr__(self):
+        return f"<SurveyQuestion {self.form_type} Q{self.question_number} [{self.status}]>"
+
+
+class SurveySubmission(db.Model):
+    """Tracks which timepoints a user has completed and when the next one unlocks."""
+
+    __tablename__ = "survey_submissions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    timepoint = db.Column(db.Integer, nullable=False)  # 1–6
+    submitted_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    next_unlocks_at = db.Column(db.DateTime, nullable=True)  # submitted_at + 7 days; NULL for T6
+
+    def __repr__(self):
+        return f"<SurveySubmission user={self.user_id} T{self.timepoint}>"
+
+
+class SurveyResponse(db.Model):
+    """Normalized per-question responses from form submissions."""
+
+    __tablename__ = "survey_responses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    goal_index = db.Column(db.Integer, nullable=False)  # 1, 2, or 3
+    timepoint = db.Column(db.Integer, nullable=False, index=True)  # 1–6
+    question_id = db.Column(db.Integer, db.ForeignKey("survey_questions.id"), nullable=False)
+    response_value = db.Column(db.Text, nullable=True)  # stored as text; cast on read
+    submitted_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    def __repr__(self):
+        return f"<SurveyResponse user={self.user_id} T{self.timepoint} G{self.goal_index} Q{self.question_id}>"
