@@ -27,6 +27,7 @@ const SCORE_COLOR = {
 
 const TP_LABELS = { T2: "Week 2", T3: "Week 3", T4: "Week 4", T5: "Week 5", T6: "Week 6" };
 const TP_ORDER = ["T6", "T5", "T4", "T3", "T2"];
+const TP_WEEK  = { 1: "Week 1", 2: "Week 2", 3: "Week 3", 4: "Week 4", 5: "Week 5", 6: "Week 6" };
 
 export default function Dashboard({ user, onLogout }) {
   const [goalFilter, setGoalFilter] = useState("all");
@@ -41,6 +42,18 @@ export default function Dashboard({ user, onLogout }) {
   const [radarFigures, setRadarFigures] = useState({});
   const [ready, setReady] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState("Loading your goals...");
+  const [surveyStatus, setSurveyStatus] = useState(null);   // "due" | "locked" | "complete" | null
+  const [surveyTimepoint, setSurveyTimepoint] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/survey/next", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => {
+        setSurveyStatus(d.status);
+        setSurveyTimepoint(d.timepoint ?? null);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Step 1: fetch goals + roseplot in parallel
@@ -114,6 +127,27 @@ export default function Dashboard({ user, onLogout }) {
   return (
     <HomeLayout user={user} onLogout={onLogout} title={`Welcome, ${user?.display_name || user?.username || "user"}!`}>
       <div style={styles.grid} className="grid12">
+        {/* Survey prompt */}
+        {surveyStatus === "due" && (
+          <section style={{ ...styles.card, gridColumn: "1 / -1", ...styles.surveyBanner }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>
+                📋 {TP_WEEK[surveyTimepoint] ?? "Weekly"} survey is ready
+              </div>
+              <div style={styles.muted}>Complete this week's survey to keep your data up to date.</div>
+            </div>
+            <Link to="/survey" style={styles.primaryBtn}>Start Survey →</Link>
+          </section>
+        )}
+
+        {surveyStatus === "locked" && surveyTimepoint && (
+          <section style={{ ...styles.card, gridColumn: "1 / -1", opacity: 0.7 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>
+              🔒 {TP_WEEK[surveyTimepoint]} survey not yet available — unlocks next week.
+            </div>
+          </section>
+        )}
+
         {/* Latest / Most Recent */}
         <section style={{ ...styles.card, gridColumn: "1 / -1" }}>
           <div style={styles.cardHeader}>
@@ -308,6 +342,13 @@ const styles = {
     border: "1px solid rgba(37,99,235,0.65)",
     background: "rgba(37,99,235,0.85)",
     boxShadow: "0 10px 22px rgba(37,99,235,0.18)",
+  },
+
+  surveyBanner: {
+    display: "flex", alignItems: "center",
+    justifyContent: "space-between", gap: 16,
+    border: "1px solid rgba(79,124,255,0.4)",
+    background: "rgba(79,124,255,0.08)",
   },
 
   recentList: { display: "grid", gap: 10 },

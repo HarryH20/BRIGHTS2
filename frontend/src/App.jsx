@@ -10,6 +10,7 @@ import SurveyAnalysis from "./home/SurveyAnalysis.jsx";
 import GoalPage from "./home/GoalPage.jsx";
 import OverviewPage from "./home/OverviewPage.jsx";
 import GraphsPage from "./home/GraphsPage.jsx";
+import SurveyForm from "./home/SurveyForm.jsx";
 
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
@@ -155,6 +156,15 @@ export default function App() {
         </RequireAuth>
         }
     />
+
+      <Route
+        path="/survey"
+        element={
+          <RequireAuth user={user} checking={checking}>
+            <SurveyForm user={user} onLogout={handleLogout} />
+          </RequireAuth>
+        }
+      />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

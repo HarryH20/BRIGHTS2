@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import timedelta
 
 from flask import Blueprint, jsonify, request, session
@@ -167,6 +168,46 @@ def submit_survey():
         "message": f"Timepoint {timepoint} submitted successfully.",
         "next_unlocks_at": next_unlocks.isoformat() if next_unlocks else None,
     }), 201
+
+
+# ── Dev-only routes ────────────────────────────────────────────────────────────
+
+@survey_bp.route("/dev/unlock-all", methods=["POST"])
+@login_required
+def dev_unlock_all():
+    """
+    DEV ONLY — immediately unlock the next survey for the current user
+    by setting next_unlocks_at to now on all their submissions.
+    Only available when FLASK_ENV=development.
+    """
+    if os.environ.get("FLASK_ENV") != "development":
+        return jsonify({"error": "Not available in production"}), 403
+
+    user_id = session["user_id"]
+    now = _utcnow()
+    SurveySubmission.query.filter_by(user_id=user_id).update({"next_unlocks_at": now})
+    db.session.commit()
+    logger.info("DEV: unlocked all surveys for user=%s", user_id)
+    return jsonify({"message": "All surveys unlocked for testing."})
+
+
+@survey_bp.route("/dev/reset", methods=["POST"])
+@login_required
+def dev_reset():
+    """
+    DEV ONLY — delete all survey submissions and responses for the current user
+    so they can start the form flow from scratch.
+    Only available when FLASK_ENV=development.
+    """
+    if os.environ.get("FLASK_ENV") != "development":
+        return jsonify({"error": "Not available in production"}), 403
+
+    user_id = session["user_id"]
+    SurveyResponse.query.filter_by(user_id=user_id).delete()
+    SurveySubmission.query.filter_by(user_id=user_id).delete()
+    db.session.commit()
+    logger.info("DEV: reset all survey data for user=%s", user_id)
+    return jsonify({"message": "Survey data reset. You can now start from T1."})
 
 
 # ── Admin routes ───────────────────────────────────────────────────────────────
