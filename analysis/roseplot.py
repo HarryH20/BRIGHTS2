@@ -65,12 +65,12 @@ def _parse_weeks(weeks):
     return [one] if 2 <= one <= 6 else [2, 3, 4, 5, 6]
 
 
-def fetch_data(participant_id, engine, goal_id=None, weeks=None, **_ignored):
+def fetch_data(user_id, engine, goal_id=None, weeks=None, **_ignored):
     """
-    Query GoalIntervention for the given participant_id with optional filters.
+    Query survey_responses for the given user_id with optional filters.
 
     Query params supported (via serve_graph passing **request.args):
-      - goal_id: a specific GoalID (string/int). If missing or "all", uses all goals.
+      - goal_id: a specific goal_index (1, 2, or 3). If missing or "all", uses all goals.
       - weeks: e.g. "2-6", "4-6", "5-6", "all". If missing, defaults to 2-6.
 
     Returns:
@@ -87,35 +87,34 @@ def fetch_data(participant_id, engine, goal_id=None, weeks=None, **_ignored):
     Scores are averaged across the selected goals for each selected week.
     Weeks not selected are returned as None so build_figure keeps its 6x3 grid stable.
     """
-    if not participant_id:
+    if not user_id:
         return None
 
     selected_weeks = _parse_weeks(weeks)
 
-    goal_id_str = None
+    # goal_id is now goal_index (1, 2, 3)
+    goal_index = None
     if goal_id not in (None, "", "all"):
-        goal_id_str = str(goal_id).strip()
+        try:
+            goal_index = int(goal_id)
+        except (ValueError, TypeError):
+            goal_index = None
 
     with engine.connect() as conn:
         sql = """
-            SELECT "GoalID", "GoalT1",
-                   "GT2Q39","GT2Q40","GT2Q41",
-                   "GT3Q39","GT3Q40","GT3Q41",
-                   "GT4Q39","GT4Q40","GT4Q41",
-                   "GT5Q39","GT5Q40","GT5Q41",
-                   "GT6Q39","GT6Q40","GT6Q41"
-            FROM "GoalIntervention"
-            WHERE "ID" = :pid
-              AND "GoalT1" IS NOT NULL
-              AND TRIM("GoalT1") != ''
+            SELECT sr.goal_index, sr.timepoint, sq.question_number, sr.response_value
+            FROM survey_responses sr
+            JOIN survey_questions sq ON sq.id = sr.question_id
+            WHERE sr.user_id = :uid
+              AND sr.timepoint BETWEEN 2 AND 6
+              AND sq.question_number IN (39, 40, 41)
+              AND sr.response_value IS NOT NULL
         """
-        params = {"pid": participant_id}
+        params = {"uid": user_id}
 
-        if goal_id_str is not None:
-            sql += ' AND "GoalID" = :gid'
-            params["gid"] = goal_id_str
-
-        sql += ' ORDER BY "GoalID"'
+        if goal_index is not None:
+            sql += " AND sr.goal_index = :gidx"
+            params["gidx"] = goal_index
 
         rows = conn.execute(sqlalchemy.text(sql), params).fetchall()
 
@@ -124,19 +123,16 @@ def fetch_data(participant_id, engine, goal_id=None, weeks=None, **_ignored):
 
     totals = defaultdict(lambda: defaultdict(list))
 
-    # Only accumulate values for selected weeks (T2..T6)
     for row in rows:
         m = row._mapping
-        for t in selected_weeks:
-            for q in ("Q39", "Q40", "Q41"):
-                col = f"GT{t}{q}"
-                val = m.get(col)
-                if val is None:
-                    continue
-                try:
-                    totals[t][q].append(int(val))
-                except (ValueError, TypeError):
-                    pass
+        t = m["timepoint"]
+        if t not in selected_weeks:
+            continue
+        q = f"Q{m['question_number']}"
+        try:
+            totals[t][q].append(int(m["response_value"]))
+        except (ValueError, TypeError):
+            pass
 
     # Always return T2..T6 keys so the plot grid doesn't change shape
     scores = {}
@@ -149,7 +145,7 @@ def fetch_data(participant_id, engine, goal_id=None, weeks=None, **_ignored):
             vals = totals[t][q]
             scores[t][q] = round(sum(vals) / len(vals)) if vals else None
 
-    return {"scores": scores, "selected_weeks": selected_weeks, "goal_id": goal_id_str}
+    return {"scores": scores, "selected_weeks": selected_weeks, "goal_id": goal_index}
 
 
 def _score_to_angle(score):

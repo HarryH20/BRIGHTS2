@@ -4,7 +4,7 @@ import time
 
 import sqlalchemy
 from flask import Blueprint, jsonify, request, session
-from models import db, User
+from models import db
 from routes.auth import login_required
 
 logger = logging.getLogger(__name__)
@@ -15,55 +15,74 @@ viz_bp = Blueprint("viz", __name__, url_prefix="/api/visualizations")
 @viz_bp.route("/goals")
 @login_required
 def get_goals():
-    """Return per-goal text and T2-T6 scores for the current user."""
-    user = db.session.get(User, session["user_id"])
-    participant_id = user.participant_id if user else None
-
-    if not participant_id:
-        return jsonify({"goals": []})
+    """Return per-goal text and T2-T6 scores for the current user from survey_responses."""
+    user_id = session["user_id"]
 
     try:
         with db.engine.connect() as conn:
-            result = conn.execute(
+            # Goal texts from T1 goal_text responses
+            text_result = conn.execute(
                 sqlalchemy.text(
                     """
-                    SELECT "GoalID", "GoalT1",
-                           "GT2Q39","GT2Q40","GT2Q41",
-                           "GT3Q39","GT3Q40","GT3Q41",
-                           "GT4Q39","GT4Q40","GT4Q41",
-                           "GT5Q39","GT5Q40","GT5Q41",
-                           "GT6Q39","GT6Q40","GT6Q41"
-                    FROM "GoalIntervention"
-                    WHERE "ID" = :pid
-                      AND "GoalT1" IS NOT NULL
-                      AND TRIM("GoalT1") != ''
-                    ORDER BY "GoalID"
+                    SELECT sr.goal_index, sr.response_value AS goal_text
+                    FROM survey_responses sr
+                    JOIN survey_questions sq ON sq.id = sr.question_id
+                    WHERE sr.user_id = :uid
+                      AND sq.scale_type = 'goal_text'
+                    ORDER BY sr.goal_index
                     """
                 ),
-                {"pid": participant_id},
+                {"uid": user_id},
             )
-            rows = result.fetchall()
+            goal_texts = {row._mapping["goal_index"]: row._mapping["goal_text"]
+                          for row in text_result}
+
+            if not goal_texts:
+                return jsonify({"goals": []})
+
+            # Q39/Q40/Q41 scores for T2-T6
+            score_result = conn.execute(
+                sqlalchemy.text(
+                    """
+                    SELECT sr.goal_index, sr.timepoint, sq.question_number, sr.response_value
+                    FROM survey_responses sr
+                    JOIN survey_questions sq ON sq.id = sr.question_id
+                    WHERE sr.user_id = :uid
+                      AND sr.timepoint BETWEEN 2 AND 6
+                      AND sq.question_number IN (39, 40, 41)
+                    ORDER BY sr.goal_index, sr.timepoint, sq.question_number
+                    """
+                ),
+                {"uid": user_id},
+            )
+            scores = {}
+            for row in score_result:
+                m = row._mapping
+                gi = m["goal_index"]
+                tp_key = f"T{m['timepoint']}"
+                q_key = f"Q{m['question_number']}"
+                scores.setdefault(gi, {}).setdefault(tp_key, {})[q_key] = (
+                    int(m["response_value"]) if m["response_value"] is not None else None
+                )
+
     except Exception:
-        logger.error("Failed to fetch goals for participant_id=%s", participant_id, exc_info=True)
+        logger.error("Failed to fetch goals for user_id=%s", user_id, exc_info=True)
         return jsonify({"error": "Failed to fetch goals"}), 500
 
     goals_out = []
-    for row in rows:
-        m = row._mapping
+    for goal_index, goal_text in sorted(goal_texts.items()):
         timepoints = {}
         for t in range(2, 7):
-            tp = {}
-            for q in ("Q39", "Q40", "Q41"):
-                val = m.get(f"GT{t}{q}")
-                try:
-                    tp[q] = int(val) if val is not None else None
-                except (ValueError, TypeError):
-                    tp[q] = None
-            timepoints[f"T{t}"] = tp
-
+            tp_key = f"T{t}"
+            tp_scores = scores.get(goal_index, {}).get(tp_key, {})
+            timepoints[tp_key] = {
+                "Q39": tp_scores.get("Q39"),
+                "Q40": tp_scores.get("Q40"),
+                "Q41": tp_scores.get("Q41"),
+            }
         goals_out.append({
-            "goal_id": int(m["GoalID"]),
-            "text": str(m["GoalT1"]).strip(),
+            "goal_id": goal_index,
+            "text": str(goal_text).strip() if goal_text else f"Goal {goal_index}",
             "timepoints": timepoints,
         })
 
@@ -88,10 +107,7 @@ def serve_graph(graph_name):
 
     start = time.time()
     try:
-        user = db.session.get(User, session["user_id"])
-        participant_id = user.participant_id if user else None
-
-        data = module.fetch_data(participant_id, db.engine, **request.args)
+        data = module.fetch_data(session["user_id"], db.engine, **request.args)
         fig_dict = module.build_figure(data)
 
         duration_ms = (time.time() - start) * 1000

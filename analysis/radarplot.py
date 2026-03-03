@@ -40,49 +40,60 @@ def _hex_to_rgba(hex_color, alpha=0.35):
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def fetch_data(participant_id, engine, goal_index=0, **kwargs):
+def fetch_data(user_id, engine, goal_index=0, **kwargs):
     """
-    Fetch trait scores for the participant's goal at position goal_index
-    (0 = first goal, 1 = second goal, etc., ordered by GoalID ascending).
+    Fetch trait scores for the user's goal at position goal_index
+    (0-based: 0 = first goal, 1 = second, etc.) from survey_responses.
 
     Returns a dict with goal metadata and computed trait scores,
-    or None if no data exists for this participant / goal_index.
+    or None if no data exists for this user / goal_index.
 
     Query param:
-        goal_index (int, default 0) — which goal to show
+        goal_index (int, default 0) — which goal to show (0-based)
     """
-    if not participant_id:
+    if not user_id:
         return None
 
     goal_index = int(goal_index)
-
-    qs_all_nums = sorted({q for tdef in TRAITS.values() for q in tdef["qs_all"]})
-    qs_t2p_nums = sorted({q for tdef in TRAITS.values() for q in tdef["qs_t2p"]})
-
-    select_cols = ['"ID"', '"GoalID"', '"GoalT1"']
-    for t in TIMEPOINTS:
-        # qs_t2p columns only exist from T2 onwards
-        q_nums = qs_all_nums if t == 1 else sorted(set(qs_all_nums) | set(qs_t2p_nums))
-        for q in q_nums:
-            select_cols.append(f'"GT{t}Q{q}"')
-        select_cols.append(f'"GT{t}Fusion"')
-
-    sql = f"""
-        SELECT {", ".join(select_cols)}
-        FROM "GoalIntervention"
-        WHERE "ID" = :pid
-          AND "GoalT1" IS NOT NULL
-          AND TRIM("GoalT1") != ''
-        ORDER BY "GoalID" ASC
-    """
+    db_goal_index = goal_index + 1  # survey_responses uses 1-based goal_index
 
     with engine.connect() as conn:
-        rows = conn.execute(sqlalchemy.text(sql), {"pid": participant_id}).fetchall()
+        # All likert responses for this user + goal across all timepoints
+        rows = conn.execute(
+            sqlalchemy.text("""
+                SELECT sr.timepoint, sq.question_number, sr.response_value
+                FROM survey_responses sr
+                JOIN survey_questions sq ON sq.id = sr.question_id
+                WHERE sr.user_id = :uid
+                  AND sr.goal_index = :gidx
+                  AND sq.question_number > 0
+                ORDER BY sr.timepoint, sq.question_number
+            """),
+            {"uid": user_id, "gidx": db_goal_index},
+        ).fetchall()
 
-    if not rows or goal_index >= len(rows):
+        # Goal text
+        text_row = conn.execute(
+            sqlalchemy.text("""
+                SELECT sr.response_value
+                FROM survey_responses sr
+                JOIN survey_questions sq ON sq.id = sr.question_id
+                WHERE sr.user_id = :uid
+                  AND sr.goal_index = :gidx
+                  AND sq.scale_type = 'goal_text'
+                LIMIT 1
+            """),
+            {"uid": user_id, "gidx": db_goal_index},
+        ).fetchone()
+
+    if not rows:
         return None
 
-    mapping = rows[goal_index]._mapping
+    goal_text = str(text_row[0]).strip() if text_row and text_row[0] else f"Goal {db_goal_index}"
+
+    # Build lookup {(timepoint, question_number): response_value}
+    mapping = {(r._mapping["timepoint"], r._mapping["question_number"]): r._mapping["response_value"]
+               for r in rows}
 
     # Compute trait scores per timepoint
     scores = []
@@ -90,21 +101,19 @@ def fetch_data(participant_id, engine, goal_index=0, **kwargs):
         for trait, tdef in TRAITS.items():
             vals = []
             for q in tdef["qs_all"]:
-                v = mapping.get(f"GT{t}Q{q}")
+                v = mapping.get((t, q))
                 vals.append(_reverse_1to7(v) if q in REVERSE_QS else _to_num(v))
             if t >= 2:
                 for q in tdef["qs_t2p"]:
-                    v = mapping.get(f"GT{t}Q{q}")
+                    v = mapping.get((t, q))
                     vals.append(_reverse_1to7(v) if q in REVERSE_QS else _to_num(v))
-            for sp in tdef["special_all"]:
-                vals.append(_to_num(mapping.get(f"GT{t}{sp}")))
+            # Fusion column not stored in survey_responses — omitted, _safe_mean handles sparse data
             mean = _safe_mean(vals)
-            # Convert NaN to None — NaN is not valid JSON
             scores.append({"t_num": t, "trait": trait, "value": None if np.isnan(mean) else mean})
 
     return {
-        "goal_id": mapping.get("GoalID"),
-        "goal_text": str(mapping.get("GoalT1", "")).strip(),
+        "goal_id": db_goal_index,
+        "goal_text": goal_text,
         "trait_order": list(TRAITS.keys()),
         "scores": scores,
     }
