@@ -45,6 +45,8 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
     "pool_recycle": 300,
+    "pool_size": 2,
+    "max_overflow": 2,
 }
 
 # Trust one layer of reverse proxy headers (nginx + Azure load balancer)

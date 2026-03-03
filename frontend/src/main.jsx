@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from './App.jsx'
 import './global.css'
 import ErrorBoundary from './ErrorBoundary.jsx'
+import "./styles/responsive.css";
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

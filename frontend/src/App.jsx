@@ -36,6 +36,10 @@ export default function App() {
     })();
   }, []);
 
+  function handleUserUpdate(updates) {
+    setUser((prev) => ({ ...prev, ...updates }));
+  }
+
   async function handleLogout() {
     try {
       await fetch("/auth/logout", {
@@ -103,7 +107,7 @@ export default function App() {
         path="/profile/*"
         element={
           <RequireAuth user={user} checking={checking}>
-            <Profile user={user} onLogout={handleLogout} />
+            <Profile user={user} onLogout={handleLogout} onUserUpdate={handleUserUpdate} />
           </RequireAuth>
         }
       />
