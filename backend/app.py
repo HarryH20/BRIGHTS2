@@ -44,14 +44,17 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=1800,  # 30 minute timeout
 )
 
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+_db_url = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_pre_ping": True,
-    "pool_recycle": 300,
-    "pool_size": 2,
-    "max_overflow": 2,
-}
+
+# pool_size/max_overflow are PostgreSQL-only — SQLite (used in CI) doesn't support them
+_engine_options = {"pool_pre_ping": True}
+if _db_url and not _db_url.startswith("sqlite"):
+    _engine_options["pool_recycle"] = 300
+    _engine_options["pool_size"] = 2
+    _engine_options["max_overflow"] = 2
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = _engine_options
 
 # Trust one layer of reverse proxy headers (nginx + Azure load balancer)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
