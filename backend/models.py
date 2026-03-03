@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -22,7 +22,7 @@ class User(db.Model):
     participant_id = db.Column(db.String(32), unique=True, nullable=True, index=True)
     avatar_url = db.Column(db.Text, nullable=True)
     display_name = db.Column(db.String(100), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
     failed_attempts = db.Column(db.Integer, nullable=False, default=0)
     locked_until = db.Column(db.DateTime, nullable=True)
@@ -39,22 +39,22 @@ class User(db.Model):
         """Check if account is currently locked."""
         if self.locked_until is None:
             return False
-        return datetime.utcnow() < self.locked_until
+        locked = self.locked_until
+        if locked.tzinfo is None:
+            locked = locked.replace(tzinfo=timezone.utc)
+        return utcnow() < locked
 
     def record_failed_attempt(self):
         """Increment failed attempts, lock if threshold reached."""
         self.failed_attempts += 1
         if self.failed_attempts >= 5:
-            # Lock for 15 minutes
-            from datetime import timedelta
-
-            self.locked_until = datetime.utcnow() + timedelta(minutes=15)
+            self.locked_until = utcnow() + timedelta(minutes=15)
 
     def record_successful_login(self):
         """Reset failed attempts and update last login."""
         self.failed_attempts = 0
         self.locked_until = None
-        self.last_login = datetime.utcnow()
+        self.last_login = utcnow()
 
     def __repr__(self):
         return f"<User {self.username}>"
@@ -105,7 +105,6 @@ class SessionLog(db.Model):
         now = utcnow()
         self.logout_at = now
         if self.login_at:
-            # Normalize both to aware or both to naive for safe subtraction
             login = self.login_at
             if login.tzinfo is None:
                 login = login.replace(tzinfo=timezone.utc)
@@ -126,7 +125,7 @@ class SurveyQuestion(db.Model):
     form_type = db.Column(db.String(10), nullable=False, index=True)
     question_number = db.Column(db.Integer, nullable=False)
     question_text = db.Column(db.Text, nullable=False)
-    # likert7, likert5, open_text, slider100
+    # likert7, goal_text
     scale_type = db.Column(db.String(20), nullable=False, default="likert7")
     status = db.Column(db.String(10), nullable=False, default="active", index=True)  # active | inactive
     display_order = db.Column(db.Integer, nullable=False)

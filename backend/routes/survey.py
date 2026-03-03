@@ -130,6 +130,12 @@ def submit_survey():
     if existing:
         return jsonify({"error": f"Timepoint {timepoint} already submitted"}), 409
 
+    # Build allowed question ID set for this form type to reject spoofed IDs
+    form_type = _form_type(timepoint)
+    allowed_qids = {
+        q.id for q in SurveyQuestion.query.filter_by(form_type=form_type, status="active").all()
+    }
+
     try:
         # Save individual responses
         for r in responses:
@@ -137,15 +143,27 @@ def submit_survey():
             goal_index = r.get("goal_index", 1)
             value = r.get("response_value")
 
-            if not qid:
+            # Reject unknown question IDs or bad goal_index
+            if not qid or qid not in allowed_qids:
                 continue
+            if not isinstance(goal_index, int) or not (1 <= goal_index <= 3):
+                continue
+
+            # Numeric responses: validate Likert range 1–7; goal_text: allow strings up to 2000 chars
+            sanitized_value = None
+            if value is not None:
+                try:
+                    int_val = int(value)
+                    sanitized_value = str(int_val) if 1 <= int_val <= 7 else None
+                except (ValueError, TypeError):
+                    sanitized_value = str(value)[:2000]
 
             db.session.add(SurveyResponse(
                 user_id=user_id,
                 goal_index=goal_index,
                 timepoint=timepoint,
                 question_id=qid,
-                response_value=str(value) if value is not None else None,
+                response_value=sanitized_value,
             ))
 
         # Record submission + set next unlock date (7 days), NULL for T6

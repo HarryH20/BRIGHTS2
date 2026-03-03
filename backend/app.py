@@ -32,8 +32,12 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 app = Flask(__name__)
 
+_secret_key = os.environ.get("FLASK_SECRET_KEY")
+if not _secret_key:
+    raise ValueError("FLASK_SECRET_KEY environment variable is not set")
+
 app.config.update(
-    SECRET_KEY=os.environ.get("FLASK_SECRET_KEY"),
+    SECRET_KEY=_secret_key,
     SESSION_COOKIE_SECURE=os.environ.get("FLASK_ENV") == "production",
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",

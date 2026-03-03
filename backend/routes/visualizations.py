@@ -89,19 +89,23 @@ def get_goals():
     return jsonify({"goals": goals_out})
 
 
+_ALLOWED_GRAPHS = {"roseplot", "radarplot"}
+
+
 @viz_bp.route("/<graph_name>")
 @login_required
 def serve_graph(graph_name):
     """
-    Auto-discover and serve any graph from the analysis/ package.
-    Adding analysis/<graph_name>.py is all that is needed for a new endpoint.
+    Serve a graph from the analysis/ package.
+    Only modules listed in _ALLOWED_GRAPHS are accessible.
     """
+    if graph_name not in _ALLOWED_GRAPHS:
+        logger.warning("Graph module not in allowlist: %s", graph_name)
+        return jsonify({"error": "Graph not found"}), 404
+
     try:
         module = importlib.import_module(f"analysis.{graph_name}")
     except ModuleNotFoundError as e:
-        if f"analysis.{graph_name}" in str(e):
-            logger.warning("Graph module not found: analysis.%s", graph_name)
-            return jsonify({"error": "Graph not found"}), 404
         logger.error("Missing dependency in analysis.%s: %s", graph_name, e)
         return jsonify({"error": "Graph failed to load due to missing dependency"}), 500
 
