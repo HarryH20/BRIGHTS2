@@ -22,8 +22,8 @@ export default function SurveyResults({ user, onLogout }) {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [goalFilter, setGoalFilter] = useState("2");
-  const subtitle = useMemo(() => `Filters: Goal ${goalFilter}`, [goalFilter]);
+  // ✅ default to ALL once data arrives
+  const [goalFilter, setGoalFilter] = useState("");
 
   useEffect(() => {
     fetch("/api/visualizations/goals", { credentials: "include" })
@@ -33,6 +33,29 @@ export default function SurveyResults({ user, onLogout }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // ✅ build dropdown options from returned goals so ids always match
+  const goalOptions = useMemo(() => {
+    return (goals || []).map((g) => ({
+      id: String(g.goal_id),
+      label: `Goal ${g.goal_id}`,
+      text: g.text,
+    }));
+  }, [goals]);
+
+  // ✅ set valid default after load (ALL)
+  useEffect(() => {
+    if (!goalFilter && goalOptions.length > 0) {
+      setGoalFilter("ALL");
+    }
+  }, [goalFilter, goalOptions]);
+
+  // ✅ filter: ALL or one goal
+  const filteredGoals = useMemo(() => {
+    if (!goalFilter) return [];
+    if (goalFilter === "ALL") return goals || [];
+    return (goals || []).filter((g) => String(g.goal_id) === String(goalFilter));
+  }, [goals, goalFilter]);
+
   return (
     <HomeLayout user={user} onLogout={onLogout} title={`${tpLabel} Survey — Results`}>
       <div style={card}>
@@ -40,17 +63,25 @@ export default function SurveyResults({ user, onLogout }) {
         <div style={row}>
           <label style={label}>
             Goal
-            <select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} style={select}>
-              <option value="1">Goal 1</option>
-              <option value="2">Goal 2</option>
-              <option value="3">Goal 3</option>
+            <select
+              value={goalFilter}
+              onChange={(e) => setGoalFilter(e.target.value)}
+              style={select}
+              disabled={loading || goalOptions.length === 0}
+            >
+              <option value="ALL">All Goals</option>
+              {goalOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>
 
         {loading ? (
           <p style={muted}>Loading…</p>
-        ) : goals.length === 0 ? (
+        ) : filteredGoals.length === 0 ? (
           <p style={muted}>No data available for this survey (with current goal filter).</p>
         ) : (
           <table style={table}>
@@ -63,8 +94,8 @@ export default function SurveyResults({ user, onLogout }) {
               </tr>
             </thead>
             <tbody>
-              {goals.map((g) => {
-                const scores = g.timepoints[tp] || {};
+              {filteredGoals.map((g) => {
+                const scores = g.timepoints?.[tp] || {};
                 return (
                   <tr key={g.goal_id}>
                     <td style={{ ...td, fontWeight: 700 }}>{g.text}</td>
@@ -72,10 +103,16 @@ export default function SurveyResults({ user, onLogout }) {
                       <td key={q} style={td}>
                         {scores[q] != null ? (
                           <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                            <span style={{
-                              display: "inline-block", width: 9, height: 9,
-                              borderRadius: "50%", background: SCORE_COLOR[scores[q]], flexShrink: 0,
-                            }} />
+                            <span
+                              style={{
+                                display: "inline-block",
+                                width: 9,
+                                height: 9,
+                                borderRadius: "50%",
+                                background: SCORE_COLOR[scores[q]],
+                                flexShrink: 0,
+                              }}
+                            />
                             {LIKERT[scores[q]]}
                           </span>
                         ) : (
@@ -91,8 +128,12 @@ export default function SurveyResults({ user, onLogout }) {
         )}
 
         <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
-          <Link to={`/surveys/${surveyId}/analysis`} style={pillLink}>Go to Analysis →</Link>
-          <Link to="/dashboard" style={pillLink}>Back to Dashboard</Link>
+          <Link to={`/surveys/${surveyId}/analysis`} style={pillLink}>
+            Go to Analysis →
+          </Link>
+          <Link to="/dashboard" style={pillLink}>
+            Back to Dashboard
+          </Link>
         </div>
       </div>
     </HomeLayout>
@@ -139,17 +180,24 @@ const pill = {
 const muted = { opacity: 0.82, fontSize: 14, lineHeight: 1.45 };
 const table = { width: "100%", borderCollapse: "collapse", fontSize: 14 };
 const th = {
-  textAlign: "left", padding: "8px 14px",
+  textAlign: "left",
+  padding: "8px 14px",
   borderBottom: "1px solid rgba(155,183,255,0.2)",
-  opacity: 0.65, fontWeight: 700, fontSize: 12,
-  textTransform: "uppercase", letterSpacing: "0.06em",
+  opacity: 0.65,
+  fontWeight: 700,
+  fontSize: 12,
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
 };
 const td = { padding: "11px 14px", borderBottom: "1px solid rgba(155,183,255,0.08)" };
 
 const pillLink = {
-  padding: "10px 14px", borderRadius: 12,
+  padding: "10px 14px",
+  borderRadius: 12,
   border: "1px solid rgba(255,255,255,0.14)",
   background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)", fontWeight: 800,
-  textDecoration: "none", display: "inline-flex",
+  color: "rgba(233,238,252,0.92)",
+  fontWeight: 800,
+  textDecoration: "none",
+  display: "inline-flex",
 };
