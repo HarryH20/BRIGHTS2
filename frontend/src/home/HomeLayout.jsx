@@ -58,7 +58,6 @@ export const styles = {
     maxWidth: 1100,
     margin: "0 auto 18px",
     display: "grid",
-    gridTemplateColumns: "1fr 2fr 1fr",
     alignItems: "center",
     gap: 16,
     padding: 18,
