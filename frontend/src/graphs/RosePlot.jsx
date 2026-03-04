@@ -42,6 +42,18 @@ export default function RosePlot({ figure: prefetchedFigure }) {
     );
   }
 
+  // No data — show a clean prompt instead of a blank Plotly grid
+  if (!figure.data || figure.data.length === 0) {
+    return (
+      <div style={styles.fallback}>
+        <p style={styles.noDataTitle}>No survey data yet</p>
+        <p style={styles.noDataHint}>
+          Complete your Week 2 survey to start seeing your goal progression here.
+        </p>
+      </div>
+    );
+  }
+
   // Override layout to fit our dark theme container
   const layout = {
     ...figure.layout,
@@ -100,5 +112,20 @@ const styles = {
     color: "#c8d6f0",
     fontSize: 13,
     opacity: 0.7,
+  },
+  noDataTitle: {
+    color: "#c8d6f0",
+    fontSize: 16,
+    fontWeight: 700,
+    margin: 0,
+  },
+  noDataHint: {
+    color: "#c8d6f0",
+    fontSize: 13,
+    opacity: 0.6,
+    textAlign: "center",
+    maxWidth: 280,
+    lineHeight: 1.5,
+    margin: 0,
   },
 };
