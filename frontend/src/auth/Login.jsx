@@ -150,9 +150,6 @@ export default function Login({ onLogin, onGoToRegister }) {
         </button>
 
         <div style={styles.footer}>
-          <small style={{ opacity: 0.8 }}>
-            Having trouble? Ask ChatGPT.
-          </small>
           <button type="button" onClick={onGoToRegister} style={styles.linkBtn}>
             Create account
           </button>
