@@ -28,6 +28,9 @@ export default function HomeLayout({ user, onLogout, title, rightSlot, children 
         </div>
 
         <div style={styles.right}>
+          {user?.role === "admin" && (
+            <Link to="/admin" style={styles.adminBtn}>Admin</Link>
+          )}
           <button type="button" onClick={toggleTheme} style={styles.themeBtn} aria-label="Toggle theme">
             {theme === "dark" ? "☀ Light" : "🌙 Dark"}
           </button>
@@ -106,6 +109,17 @@ export const styles = {
     fontWeight: 700,
     fontSize: 13,
     whiteSpace: "nowrap",
+  },
+
+  adminBtn: {
+    padding: "10px 14px",
+    borderRadius: 12,
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
+    textDecoration: "none",
+    fontWeight: 700,
+    fontSize: 13,
   },
 
   logoutBtn: {
