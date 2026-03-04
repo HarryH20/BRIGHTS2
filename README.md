@@ -86,11 +86,14 @@ Built with **Flask** (backend), **React/Vite** (frontend), **PostgreSQL via Supa
 
 ### Admin
 
-| Username | Password | Role |
-|----------|----------|------|
-| admin | BrightsAdmin2026! | admin |
+| Username | Password | Role | Purpose |
+|----------|----------|------|---------|
+| admin | BrightsAdmin2026! | admin | Full admin — question management, audit logs |
+| demo_admin | DemoAdmin2026! | admin | Demo admin — same access as admin, safe to share for demos |
 
-The admin account has access to all `/api/admin/*` endpoints. Log in as admin to manage survey questions.
+Both accounts have access to all `/api/admin/*` endpoints including the admin panel, rose plot aggregations, audit log, and survey question editor.
+
+> **Creating accounts:** These are created directly in Supabase (one-time setup). If you need to recreate `demo_admin` run `python create_demo_admin.py` from inside the `web` container — it is idempotent.
 
 ### Demo Participants
 
@@ -362,7 +365,7 @@ Charts are auto-discovered from `analysis/`. To add a new chart:
 1. Create `analysis/<name>.py`
 2. Implement two functions:
    ```python
-   def fetch_data(participant_id, engine, **kwargs):
+   def fetch_data(user_id, engine, **kwargs):
        # Query DB, return data dict (or None if no data)
        ...
 
@@ -370,18 +373,19 @@ Charts are auto-discovered from `analysis/`. To add a new chart:
        # Build and return a Plotly figure as a dict (fig.to_dict())
        ...
    ```
-3. It's immediately available at `/api/visualizations/<name>` — no backend changes needed
+3. Add the module name to `_ALLOWED_GRAPHS` in `backend/routes/visualizations.py`
+4. It's then available at `/api/visualizations/<name>` — no other backend changes needed
 
-**How it works:** `visualizations.py` uses `importlib.import_module(f"analysis.{graph_name}")` to dynamically load whichever module matches the URL path segment, then calls `fetch_data` and `build_figure` in sequence.
+**How it works:** `visualizations.py` uses `importlib.import_module(f"analysis.{graph_name}")` to dynamically load whichever module matches the URL path segment, then calls `fetch_data(user_id, engine, **request.args)` and `build_figure(data)` in sequence.
 
 **Current charts:**
 
 | Module | Endpoint | Description |
 |--------|----------|-------------|
-| `roseplot.py` | `/api/visualizations/roseplot` | 6×3 polar bar grid — one bar per timepoint per question, plus a distribution summary row |
-| `radarplot.py` | `/api/visualizations/radarplot` | Spider chart for a single goal across T2–T6 for Q39/Q40/Q41 |
+| `roseplot.py` | `/api/visualizations/roseplot` | 6×3 polar bar grid — one polar bar per timepoint (T2–T6) per question (Q39/Q40/Q41) |
+| `radarplot.py` | `/api/visualizations/radarplot` | Spider chart per goal. Full mode (5 traits, T1 baseline) for in-app survey participants; simple mode (Progress/Confidence/Importance from Q39/40/41, T2 baseline) for historical participants. |
 
-**Data source:** Both charts currently read from `GoalIntervention` (historical research data). Participants whose `participant_id` matches a `GoalIntervention."ID"` row automatically see their data populated. New participants completing the new survey forms will need the visualization layer updated to also read from `survey_responses`.
+**Data source:** All charts read from `survey_responses`. Historical research data (formerly in `GoalIntervention`) was migrated into `survey_responses` so historical participants are treated identically to new in-app users.
 
 ---
 
@@ -499,16 +503,16 @@ az containerapp logs show --name brights-frontend --resource-group brights-rg --
 - Should return `status: "due"` with a `questions` array for a user who hasn't submitted T1 yet
 
 **Dashboard shows "No survey data available" for all goals:**
-- The logged-in user's `participant_id` must match an `"ID"` in `GoalIntervention`
-- Demo accounts (demo1/demo2/demo3) are linked to real participant IDs with data
-- New self-registered accounts won't have GoalIntervention data unless you link them manually
+- Goal cards are populated from `survey_responses`. A user must have either submitted the T1 survey (in-app) or have historical data migrated into `survey_responses` for their `user_id`
+- Demo accounts (demo1/demo2/demo3) have historical data already migrated and will show goal cards automatically
+- New self-registered accounts will see an empty dashboard until they complete the T1 survey
 
 **Graph endpoint returns 404:**
 - The URL path segment must match a filename in `analysis/` exactly (e.g. `/api/visualizations/roseplot` → `analysis/roseplot.py`)
 
 **Admin routes return 403:**
 - Must be logged in as a user with `role = "admin"` in the database
-- Use the `admin` account (username: `admin`, password: `BrightsAdmin2026!`)
+- Use `admin` / `BrightsAdmin2026!` or `demo_admin` / `DemoAdmin2026!`
 
 ---
 
