@@ -380,6 +380,37 @@ def deactivate_question(qid):
     return jsonify({"message": f"Question {qid} deactivated.", "question": _q_dict(q)})
 
 
+@admin_survey_bp.route("/questions/<int:qid>/reactivate", methods=["POST"])
+@admin_required
+def reactivate_question(qid):
+    """
+    Reactivate an inactive question, placing it at the end of the active list
+    for its form_type.
+    """
+    q = db.session.get(SurveyQuestion, qid)
+    if not q:
+        return jsonify({"error": "Question not found"}), 404
+
+    if q.status == "active":
+        return jsonify({"error": "Question is already active"}), 400
+
+    max_order = (
+        db.session.query(db.func.max(SurveyQuestion.display_order))
+        .filter_by(form_type=q.form_type, status="active")
+        .scalar() or 0
+    )
+
+    try:
+        q.status = "active"
+        q.display_order = max_order + 1
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Reactivate failed"}), 500
+
+    return jsonify({"question": _q_dict(q)})
+
+
 @admin_survey_bp.route("/questions/<int:qid>/replace", methods=["POST"])
 @admin_required
 def replace_question(qid):
