@@ -24,6 +24,39 @@ def _form_type(timepoint: int) -> str:
 
 # ── Participant routes ─────────────────────────────────────────────────────────
 
+@survey_bp.route("/status", methods=["GET"])
+@login_required
+def get_survey_status():
+    """
+    Return completion status for all 6 timepoints for the logged-in user.
+
+    Response:
+    {
+      "timepoints": [
+        { "timepoint": 1, "completed": true,  "submitted_at": "2026-01-01T..." },
+        { "timepoint": 2, "completed": true,  "submitted_at": "2026-01-08T..." },
+        { "timepoint": 3, "completed": false, "submitted_at": null },
+        ...
+      ],
+      "completed_count": 2
+    }
+    """
+    user_id = session["user_id"]
+    submissions = SurveySubmission.query.filter_by(user_id=user_id).all()
+    completed = {s.timepoint: s for s in submissions}
+
+    timepoints = []
+    for t in range(1, 7):
+        sub = completed.get(t)
+        timepoints.append({
+            "timepoint": t,
+            "completed": sub is not None,
+            "submitted_at": sub.submitted_at.isoformat() if sub else None,
+        })
+
+    return jsonify({"timepoints": timepoints, "completed_count": len(completed)})
+
+
 @survey_bp.route("/next", methods=["GET"])
 @login_required
 def get_next_survey():

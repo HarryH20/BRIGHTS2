@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 
 const TP_LABELS = { 1: "Week 1", 2: "Week 2", 3: "Week 3", 4: "Week 4", 5: "Week 5", 6: "Week 6" };
@@ -14,7 +14,8 @@ const LIKERT7_LABELS = {
   7: "Strongly\nAgree",
 };
 
-export default function SurveyForm({ user, onLogout }) {
+export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
+  const navigate = useNavigate();
   const [state, setState] = useState("loading"); // loading | due | locked | complete | submitting | submitted | error
   const [surveyData, setSurveyData] = useState(null);    // { timepoint, form_type, goals, questions }
   const [lockInfo, setLockInfo]     = useState(null);    // { timepoint, next_unlocks_at }
@@ -26,6 +27,15 @@ export default function SurveyForm({ user, onLogout }) {
   // Which goal tab is active (1-based)
   const [activeGoal, setActiveGoal] = useState(1);
   const [submitError, setSubmitError] = useState(null);
+
+  // Warn on browser tab close / navigate-away when there are unsaved responses
+  const hasResponses = Object.keys(responses).length > 0;
+  useEffect(() => {
+    if (!hasResponses || state !== "due") return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasResponses, state]);
 
   useEffect(() => {
     fetch("/api/survey/next", { credentials: "include" })
@@ -109,6 +119,18 @@ export default function SurveyForm({ user, onLogout }) {
     return goalTextCount + likertCount * numGoals();
   }
 
+  // ── Back navigation with unsaved-data warning ──────────────────────────────
+
+  function handleBack() {
+    if (hasResponses) {
+      const ok = window.confirm(
+        "You have unsaved responses. If you leave now your progress will be lost. Exit anyway?"
+      );
+      if (!ok) return;
+    }
+    navigate("/dashboard");
+  }
+
   // ── Submit ─────────────────────────────────────────────────────────────────
 
   async function handleSubmit() {
@@ -140,6 +162,7 @@ export default function SurveyForm({ user, onLogout }) {
         setSubmitError(data.error || "Submission failed.");
         setState("due");
       } else {
+        onSurveyComplete?.();
         setState("submitted");
       }
     } catch {
@@ -241,7 +264,12 @@ export default function SurveyForm({ user, onLogout }) {
       user={user}
       onLogout={onLogout}
       title={`${TP_LABELS[surveyData.timepoint]} Survey`}
-      rightSlot={<span style={s.pill}>{progress}% complete</span>}
+      rightSlot={
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={s.pill}>{progress}% complete</span>
+          <button type="button" onClick={handleBack} style={s.btn}>← Exit</button>
+        </div>
+      }
     >
       <div style={s.wrapper}>
 
@@ -394,15 +422,15 @@ const s = {
   tabs: { display: "flex", gap: 8, flexWrap: "wrap" },
   tab: {
     padding: "8px 14px", borderRadius: 10, fontSize: 13, fontWeight: 700,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.05)",
-    color: "rgba(233,238,252,0.7)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--input-bg-glass)",
+    color: "var(--text-dim)",
     cursor: "pointer",
   },
   tabActive: {
     border: "1px solid rgba(79,124,255,0.6)",
     background: "rgba(79,124,255,0.18)",
-    color: "#e9eefc",
+    color: "var(--text-primary)",
   },
   tabDone: {
     border: "1px solid rgba(74,222,128,0.4)",
@@ -412,8 +440,8 @@ const s = {
 
   card: {
     padding: 24, borderRadius: 16,
-    border: "1px solid rgba(155,183,255,0.16)",
-    background: "rgba(16, 25, 42, 0.65)",
+    border: "1px solid var(--card-border)",
+    background: "var(--card-bg)",
     boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
     backdropFilter: "blur(8px)",
   },
@@ -435,9 +463,9 @@ const s = {
   likertButtons: { display: "flex", gap: 6, flex: 1, justifyContent: "center" },
   likertBtn: {
     width: 38, height: 38, borderRadius: 8, fontSize: 13, fontWeight: 700,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.05)",
-    color: "rgba(233,238,252,0.75)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--input-bg-glass)",
+    color: "var(--ghost-color)",
     cursor: "pointer",
     transition: "background 0.15s, border-color 0.15s, color 0.15s",
   },
@@ -453,9 +481,9 @@ const s = {
 
   textarea: {
     width: "100%", padding: "10px 12px", borderRadius: 10,
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    color: "#e9eefc", fontSize: 14, lineHeight: 1.5,
+    background: "var(--input-bg-glass)",
+    border: "1px solid var(--input-border-glass)",
+    color: "var(--text-primary)", fontSize: 14, lineHeight: 1.5,
     resize: "vertical", boxSizing: "border-box",
   },
 
@@ -467,9 +495,9 @@ const s = {
 
   btn: {
     padding: "10px 16px", borderRadius: 12, fontWeight: 700, fontSize: 14,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(233,238,252,0.85)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
     cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center",
   },
   primaryBtn: {
@@ -482,9 +510,9 @@ const s = {
   },
   pill: {
     padding: "5px 10px", borderRadius: 999, fontSize: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(233,238,252,0.85)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
   },
 
   center: { display: "flex", justifyContent: "center", padding: 60 },

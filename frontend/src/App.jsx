@@ -18,10 +18,17 @@ function RequireAuth({ user, checking, children }) {
   return children;
 }
 
+const EMPTY_CHART_CACHE = { goals: [], roseFigure: null, radarFigures: {}, loaded: false };
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
+  const [chartCache, setChartCache] = useState(EMPTY_CHART_CACHE);
   const navigate = useNavigate();
+
+  function clearChartCache() {
+    setChartCache(EMPTY_CHART_CACHE);
+  }
 
   useEffect(() => {
     (async () => {
@@ -49,6 +56,7 @@ export default function App() {
       });
     } finally {
       setUser(null);
+      clearChartCache();
       navigate("/login", { replace: true });
     }
   }
@@ -98,7 +106,7 @@ export default function App() {
         path="/dashboard/*"
         element={
           <RequireAuth user={user} checking={checking}>
-            <Dashboard user={user} onLogout={handleLogout} />
+            <Dashboard user={user} onLogout={handleLogout} chartCache={chartCache} setChartCache={setChartCache} />
           </RequireAuth>
         }
       />
@@ -161,7 +169,7 @@ export default function App() {
         path="/survey"
         element={
           <RequireAuth user={user} checking={checking}>
-            <SurveyForm user={user} onLogout={handleLogout} />
+            <SurveyForm user={user} onLogout={handleLogout} onSurveyComplete={clearChartCache} />
           </RequireAuth>
         }
       />

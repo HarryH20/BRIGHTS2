@@ -278,6 +278,9 @@ def login():
             "username": user.username,
             "email": user.email,
             "role": user.role,
+            "participant_id": user.participant_id,
+            "avatar_url": user.avatar_url,
+            "display_name": user.display_name,
             "last_login": user.last_login.isoformat() if user.last_login else None
         }
     }), 200

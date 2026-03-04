@@ -29,21 +29,20 @@ const TP_LABELS = { T2: "Week 2", T3: "Week 3", T4: "Week 4", T5: "Week 5", T6: 
 const TP_ORDER = ["T6", "T5", "T4", "T3", "T2"];
 const TP_WEEK  = { 1: "Week 1", 2: "Week 2", 3: "Week 3", 4: "Week 4", 5: "Week 5", 6: "Week 6" };
 
-export default function Dashboard({ user, onLogout }) {
+export default function Dashboard({ user, onLogout, chartCache, setChartCache }) {
   const [goalFilter, setGoalFilter] = useState("all");
   const [weekFilter, setWeekFilter] = useState("2-6");
 
-  const [goals, setGoals] = useState([]);
-
-  // Base (initial) rose + filtered rose (changes with dropdowns)
-  const [roseFigure, setRoseFigure] = useState(null);
-  const [filteredRoseFigure, setFilteredRoseFigure] = useState(null);
-
-  const [radarFigures, setRadarFigures] = useState({});
-  const [ready, setReady] = useState(false);
+  // Initialize from cache if available — avoids re-fetching on navigation
+  const [goals, setGoals] = useState(chartCache?.loaded ? chartCache.goals : []);
+  const [roseFigure, setRoseFigure] = useState(chartCache?.loaded ? chartCache.roseFigure : null);
+  const [filteredRoseFigure, setFilteredRoseFigure] = useState(chartCache?.loaded ? chartCache.roseFigure : null);
+  const [radarFigures, setRadarFigures] = useState(chartCache?.loaded ? chartCache.radarFigures : {});
+  const [ready, setReady] = useState(chartCache?.loaded ?? false);
   const [loadingStatus, setLoadingStatus] = useState("Loading your goals...");
   const [surveyStatus, setSurveyStatus] = useState(null);   // "due" | "locked" | "complete" | null
   const [surveyTimepoint, setSurveyTimepoint] = useState(null);
+  const [surveyCompletion, setSurveyCompletion] = useState(null); // array of 6 timepoint statuses
 
   useEffect(() => {
     fetch("/api/survey/next", { credentials: "include" })
@@ -53,9 +52,17 @@ export default function Dashboard({ user, onLogout }) {
         setSurveyTimepoint(d.timepoint ?? null);
       })
       .catch(() => {});
+
+    fetch("/api/survey/status", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => setSurveyCompletion(d.timepoints ?? null))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
+    // Skip fetch if data is already cached
+    if (chartCache?.loaded) return;
+
     // Step 1: fetch goals + roseplot in parallel
     Promise.allSettled([
       fetch("/api/visualizations/goals", { credentials: "include" }).then((r) =>
@@ -69,12 +76,12 @@ export default function Dashboard({ user, onLogout }) {
         goalsResult.status === "fulfilled" ? goalsResult.value.goals || [] : [];
       const rose = roseResult.status === "fulfilled" ? roseResult.value : null;
 
-      // Save base + initialize filtered to base
       setGoals(fetchedGoals);
       setRoseFigure(rose);
       setFilteredRoseFigure(rose);
 
       if (fetchedGoals.length === 0) {
+        setChartCache?.({ goals: [], roseFigure: rose, radarFigures: {}, loaded: true });
         setReady(true);
         return;
       }
@@ -94,10 +101,11 @@ export default function Dashboard({ user, onLogout }) {
         });
 
         setRadarFigures(radars);
+        setChartCache?.({ goals: fetchedGoals, roseFigure: rose, radarFigures: radars, loaded: true });
         setReady(true);
       });
     });
-  }, []);
+  }, []); // eslint-disable-line
 
   // Refetch roseplot whenever filters change (after initial load)
   useEffect(() => {
@@ -110,10 +118,8 @@ export default function Dashboard({ user, onLogout }) {
     fetch(`/api/visualizations/roseplot?${params.toString()}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then((fig) => setFilteredRoseFigure(fig))
-      .catch(() => {
-        // keep whatever is currently displayed
-      });
-  }, [goalFilter, weekFilter, ready]);
+      .catch(() => {});
+  }, [goalFilter, weekFilter, ready]); // eslint-disable-line
 
   // Timepoints that have at least one non-null score across any goal
   const activeTimepoints = TP_ORDER.filter((tp) =>
@@ -132,7 +138,7 @@ export default function Dashboard({ user, onLogout }) {
           <section style={{ ...styles.card, gridColumn: "1 / -1", ...styles.surveyBanner }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>
-                📋 {TP_WEEK[surveyTimepoint] ?? "Weekly"} survey is ready
+                {TP_WEEK[surveyTimepoint] ?? "Weekly"} survey is ready
               </div>
               <div style={styles.muted}>Complete this week's survey to keep your data up to date.</div>
             </div>
@@ -144,6 +150,34 @@ export default function Dashboard({ user, onLogout }) {
           <section style={{ ...styles.card, gridColumn: "1 / -1", opacity: 0.7 }}>
             <div style={{ fontWeight: 700, fontSize: 14 }}>
               🔒 {TP_WEEK[surveyTimepoint]} survey not yet available — unlocks next week.
+            </div>
+          </section>
+        )}
+
+        {/* Timepoint completion tracker */}
+        {surveyCompletion && (
+          <section style={{ ...styles.card, gridColumn: "1 / -1" }}>
+            <div style={styles.cardHeader}>
+              <h2 style={styles.h2}>Survey Progress</h2>
+              <span style={{ fontSize: 13, opacity: 0.6 }}>
+                {surveyCompletion.filter((t) => t.completed).length} / 6 completed
+              </span>
+            </div>
+            <div style={styles.trackerRow} className="trackerRowMobile">
+              {surveyCompletion.map((t) => (
+                <div key={t.timepoint} style={{
+                  ...styles.trackerCell,
+                  ...(t.completed ? styles.trackerDone : styles.trackerMissing),
+                }}>
+                  <span style={styles.trackerWeek}>Week {t.timepoint}</span>
+                  <span style={styles.trackerIcon}>{t.completed ? "✓" : "✗"}</span>
+                  {t.submitted_at && (
+                    <span style={styles.trackerDate}>
+                      {new Date(t.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
           </section>
         )}
@@ -298,8 +332,8 @@ const styles = {
   card: {
     padding: 18,
     borderRadius: 16,
-    border: "1px solid rgba(155,183,255,0.16)",
-    background: "rgba(16, 25, 42, 0.65)",
+    border: "1px solid var(--card-border)",
+    background: "var(--card-bg)",
     boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
     backdropFilter: "blur(8px)",
   },
@@ -316,9 +350,9 @@ const styles = {
   linkBtn: {
     padding: "10px 14px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(233,238,252,0.92)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
     textDecoration: "none",
     fontWeight: 700,
     display: "inline-flex",
@@ -326,12 +360,12 @@ const styles = {
   },
   smallLink: {
     textDecoration: "none",
-    color: "rgba(233,238,252,0.90)",
+    color: "var(--ghost-color)",
     fontWeight: 700,
     padding: "6px 10px",
     borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
   },
   primaryBtn: {
     textDecoration: "none",
@@ -359,16 +393,16 @@ const styles = {
     gap: 12,
     padding: "10px 12px",
     borderRadius: 12,
-    border: "1px solid rgba(155,183,255,0.12)",
-    background: "rgba(255,255,255,0.03)",
+    border: "1px solid var(--subtle-border)",
+    background: "var(--surface-subtle)",
   },
   recentName: { fontWeight: 700 },
   recentLinks: { display: "flex", gap: 10 },
 
   summaryBox: {
     borderRadius: 12,
-    border: "1px solid rgba(155,183,255,0.12)",
-    background: "rgba(255,255,255,0.03)",
+    border: "1px solid var(--subtle-border)",
+    background: "var(--surface-subtle)",
     padding: 12,
   },
   summaryTitle: { fontWeight: 800, marginBottom: 6 },
@@ -376,8 +410,8 @@ const styles = {
   graphBox: {
     marginTop: 12,
     borderRadius: 12,
-    border: "1px solid rgba(155,183,255,0.12)",
-    background: "rgba(255,255,255,0.03)",
+    border: "1px solid var(--subtle-border)",
+    background: "#0b1220",
   },
 
   filtersRow: {
@@ -390,17 +424,44 @@ const styles = {
   select: {
     padding: "8px 10px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(233,238,252,0.92)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
     fontWeight: 800,
     fontSize: 13,
     outline: "none",
   },
   overviewBox: {
     borderRadius: 12,
-    border: "1px solid rgba(155,183,255,0.12)",
-    background: "rgba(255,255,255,0.03)",
+    border: "1px solid var(--subtle-border)",
+    background: "#0b1220",
     padding: 12,
   },
+
+  trackerRow: {
+    display: "grid",
+    gridTemplateColumns: "repeat(6, 1fr)",
+    gap: 10,
+  },
+  trackerCell: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 4,
+    padding: "12px 8px",
+    borderRadius: 12,
+    border: "1px solid",
+    textAlign: "center",
+  },
+  trackerDone: {
+    borderColor: "rgba(74,222,128,0.35)",
+    background: "rgba(74,222,128,0.07)",
+  },
+  trackerMissing: {
+    borderColor: "rgba(248,113,113,0.25)",
+    background: "rgba(248,113,113,0.05)",
+  },
+  trackerWeek: { fontSize: 11, fontWeight: 700, opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.05em" },
+  trackerIcon: { fontSize: 20, lineHeight: 1 },
+  trackerDate: { fontSize: 11, opacity: 0.5 },
 };
