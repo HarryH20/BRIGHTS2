@@ -1,4 +1,6 @@
 import logging
+import importlib
+
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
@@ -10,6 +12,30 @@ from routes.auth import admin_required
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+
+@admin_bp.route("/roseplot", methods=["GET"])
+@admin_required
+def admin_roseplot():
+    """
+    GET /api/admin/roseplot?user_id=all|<id>&goal_id=all|1|2|3&weeks=all|2-6|4-6|...
+    Returns the same Plotly figure dict format as /api/visualizations/roseplot,
+    but aggregated across all users by default.
+    """
+    try:
+        admin_mod = importlib.import_module("analysis.admin_roseplot")
+        rose_mod = importlib.import_module("analysis.roseplot")
+
+        data = admin_mod.fetch_data(
+            db.engine,
+            user_id=request.args.get("user_id"),
+            goal_id=request.args.get("goal_id"),
+            weeks=request.args.get("weeks"),
+        )
+        fig_dict = rose_mod.build_figure(data)
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate admin roseplot", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500
 
 
 # =============================================================================
