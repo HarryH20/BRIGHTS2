@@ -215,8 +215,16 @@ def build_figure(data):
         )
     )
 
-    # Default comparison = last available timepoint
-    default_cmp = compare_tps[-1]
+    # Default comparison = last timepoint that has at least one non-None value
+    def _has_data(t):
+        return any(v is not None for v in values_for_time(t)[:-1])  # exclude wrap-around
+
+    default_cmp = next(
+        (t for t in reversed(compare_tps) if _has_data(t)),
+        compare_tps[-1],
+    )
+    active_step = compare_tps.index(default_cmp)
+
     fig.add_trace(
         go.Scatterpolar(
             r=values_for_time(default_cmp),
@@ -263,7 +271,7 @@ def build_figure(data):
         legend=dict(font=dict(color="#c8d6f0")),
         sliders=[
             dict(
-                active=len(compare_tps) - 1,
+                active=active_step,
                 currentvalue=dict(prefix="Compare vs: ", font=dict(color="#c8d6f0")),
                 pad=dict(t=40),
                 steps=steps,
