@@ -86,14 +86,11 @@ Built with **Flask** (backend), **React/Vite** (frontend), **PostgreSQL via Supa
 
 ### Admin
 
-| Username | Password | Role | Purpose |
-|----------|----------|------|---------|
-| admin | BrightsAdmin2026! | admin | Full admin — question management, audit logs |
-| demo_admin | DemoAdmin2026! | admin | Demo admin — same access as admin, safe to share for demos |
+| Username | Password | Role |
+|----------|----------|------|
+| admin | BrightsAdmin2026! | admin |
 
-Both accounts have access to all `/api/admin/*` endpoints including the admin panel, rose plot aggregations, audit log, and survey question editor.
-
-> **Creating accounts:** These are created directly in Supabase (one-time setup). If you need to recreate `demo_admin` run `python create_demo_admin.py` from inside the `web` container — it is idempotent.
+The admin account has access to all `/api/admin/*` endpoints including the admin panel, rose plot aggregations, audit log, and survey question editor. Created directly in Supabase — one-time setup.
 
 ### Demo Participants
 
@@ -512,7 +509,7 @@ az containerapp logs show --name brights-frontend --resource-group brights-rg --
 
 **Admin routes return 403:**
 - Must be logged in as a user with `role = "admin"` in the database
-- Use `admin` / `BrightsAdmin2026!` or `demo_admin` / `DemoAdmin2026!`
+- Use the `admin` account (username: `admin`, password: `BrightsAdmin2026!`)
 
 ---
 
