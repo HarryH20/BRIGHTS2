@@ -32,22 +32,29 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 app = Flask(__name__)
 
+_secret_key = os.environ.get("FLASK_SECRET_KEY")
+if not _secret_key:
+    raise ValueError("FLASK_SECRET_KEY environment variable is not set")
+
 app.config.update(
-    SECRET_KEY=os.environ.get("FLASK_SECRET_KEY"),
+    SECRET_KEY=_secret_key,
     SESSION_COOKIE_SECURE=os.environ.get("FLASK_ENV") == "production",
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     PERMANENT_SESSION_LIFETIME=1800,  # 30 minute timeout
 )
 
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+_db_url = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_DATABASE_URI"] = _db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_pre_ping": True,
-    "pool_recycle": 300,
-    "pool_size": 2,
-    "max_overflow": 2,
-}
+
+# pool_size/max_overflow are PostgreSQL-only — SQLite (used in CI) doesn't support them
+_engine_options = {"pool_pre_ping": True}
+if _db_url and not _db_url.startswith("sqlite"):
+    _engine_options["pool_recycle"] = 300
+    _engine_options["pool_size"] = 2
+    _engine_options["max_overflow"] = 2
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = _engine_options
 
 # Trust one layer of reverse proxy headers (nginx + Azure load balancer)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
@@ -59,11 +66,14 @@ from routes.auth import auth_bp
 from routes.visualizations import viz_bp
 from routes.logs import logs_bp
 from routes.admin import admin_bp
+from routes.survey import survey_bp, admin_survey_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(viz_bp)
 app.register_blueprint(logs_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(survey_bp)
+app.register_blueprint(admin_survey_bp)
 
 # Create tables
 with app.app_context():

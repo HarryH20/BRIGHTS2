@@ -5,13 +5,16 @@ import App from './App.jsx'
 import './global.css'
 import ErrorBoundary from './ErrorBoundary.jsx'
 import "./styles/responsive.css";
+import { ThemeProvider } from './ThemeContext.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <ErrorBoundary>
+    <ThemeProvider>
+      <ErrorBoundary>
         <BrowserRouter>
-            <App />
+          <App />
         </BrowserRouter>
-    </ErrorBoundary>
+      </ErrorBoundary>
+    </ThemeProvider>
   </StrictMode>,
 );

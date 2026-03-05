@@ -131,7 +131,7 @@ export default function GoalPage({ user, onLogout }) {
             <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>
               Goal Traits Radar
             </div>
-            <div style={{ borderRadius: 12, border: "1px solid rgba(155,183,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
+            <div style={{ borderRadius: 12, border: "1px solid var(--subtle-border)", background: "#0b1220" }}>
               <RadarPlot goalIndex={goalIndex} />
             </div>
           </div>
@@ -148,8 +148,8 @@ export default function GoalPage({ user, onLogout }) {
 const card = {
   padding: 22,
   borderRadius: 16,
-  border: "1px solid rgba(155,183,255,0.16)",
-  background: "rgba(16, 25, 42, 0.65)",
+  border: "1px solid var(--card-border)",
+  background: "var(--card-bg)",
   boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
   backdropFilter: "blur(8px)",
 };
@@ -159,17 +159,17 @@ const label = { display: "grid", gap: 6, fontWeight: 800, fontSize: 13, opacity:
 const select = {
   padding: "10px 12px",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)",
+  border: "1px solid var(--ghost-border)",
+  background: "var(--ghost-bg)",
+  color: "var(--ghost-color)",
   outline: "none",
 };
 const pillBtn = {
   padding: "10px 12px",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)",
+  border: "1px solid var(--ghost-border)",
+  background: "var(--ghost-bg)",
+  color: "var(--ghost-color)",
   fontWeight: 900,
   textDecoration: "none",
 };
@@ -177,15 +177,15 @@ const pill = {
   padding: "6px 10px",
   borderRadius: 999,
   fontSize: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.85)",
+  border: "1px solid var(--ghost-border)",
+  background: "var(--ghost-bg)",
+  color: "var(--ghost-color)",
 };
 const pillLink = {
   padding: "10px 14px", borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)", fontWeight: 800,
+  border: "1px solid var(--ghost-border)",
+  background: "var(--ghost-bg)",
+  color: "var(--ghost-color)", fontWeight: 800,
   textDecoration: "none", display: "inline-flex",
 };
 

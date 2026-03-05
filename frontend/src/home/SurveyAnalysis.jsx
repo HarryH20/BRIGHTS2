@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 
@@ -52,54 +52,48 @@ function ScoreCell({ value }) {
   );
 }
 
-function ProgressCelebration({ show, durationMs = 2400 }) {
-  const [visible, setVisible] = useState(false);
-  const [burstKey, setBurstKey] = useState(0);
-
-  useEffect(() => {
-    if (!show) return;
-    setBurstKey((k) => k + 1);
-    setVisible(true);
-    const t = setTimeout(() => setVisible(false), durationMs);
-    return () => clearTimeout(t);
-  }, [show, durationMs]);
-
-  if (!visible) return null;
+function ConfettiBurst({ seed }) {
+  // Re-mounting this component (changing key) replays the burst
+  const pieces = useMemo(() => {
+    const n = 26;
+    const rand = (a, b) => a + Math.random() * (b - a);
+    return Array.from({ length: n }, (_, i) => ({
+      id: `${seed}-${i}`,
+      left: rand(20, 80),     // %
+      size: rand(6, 12),      // px
+      dx: rand(-180, 180),    // px
+      dy: rand(120, 260),     // px
+      rot: rand(-540, 540),   // deg
+      dur: rand(520, 820),    // ms
+      delay: rand(0, 40),     // ms
+      color: `hsl(${Math.floor(rand(0, 360))} 90% 60%)`,
+    }));
+  }, [seed]);
 
   return (
-    <div style={celeWrap} aria-live="polite">
-      <ConfettiBurst key={burstKey} />
-      <div style={celeToast}>
-        <div style={celeTitle}>Congrats!</div>
-        <div style={celeBody}>You've made progress on your goals!</div>
-      </div>
+    <div style={confettiWrap} aria-hidden>
+      {pieces.map((p) => (
+        <span
+          key={p.id}
+          style={{
+            position: "absolute",
+            left: `${p.left}%`,
+            top: "0%",
+            width: p.size,
+            height: p.size * 0.6,
+            borderRadius: 3,
+            background: p.color,
+            transform: "translate(-50%, 0)",
+            animation: `confetti-fly ${p.dur}ms ease-out ${p.delay}ms forwards`,
+            ["--dx"]: `${p.dx}px`,
+            ["--dy"]: `${p.dy}px`,
+            ["--rot"]: `${p.rot}deg`,
+          }}
+        />
+      ))}
     </div>
   );
 }
-
-function ConfettiBurst() {
-  const pieces = Array.from({ length: 70 }, (_, i) => i);
-
-  return (
-    <>
-      <style>{confettiCss}</style>
-      <div className="confetti-layer" aria-hidden="true">
-        {pieces.map((i) => (
-          <span
-            key={i}
-            className="confetti"
-            style={{
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 0.2}s`,
-              transform: `rotate(${Math.random() * 360}deg)`,
-            }}
-          />
-        ))}
-      </div>
-    </>
-  );
-}
-
 
 export default function SurveyAnalysis({ user, onLogout }) {
   const { surveyId } = useParams();
@@ -110,8 +104,11 @@ export default function SurveyAnalysis({ user, onLogout }) {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [goalFilter, setGoalFilter] = useState("2");
-  const subtitle = useMemo(() => `Filters: Goal ${goalFilter}`, [goalFilter]);
+  // ✅ add "ALL"
+  const [goalFilter, setGoalFilter] = useState(""); // "" means not set yet
+  const [partyKey, setPartyKey] = useState(0);
+  const cardRef = useRef(null);
+
   useEffect(() => {
     fetch("/api/visualizations/goals", { credentials: "include" })
       .then((r) => r.json())
@@ -120,63 +117,77 @@ export default function SurveyAnalysis({ user, onLogout }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const anyImproved = useMemo(() => {
-    if (loading) return false;
-    if (isT2) return false; // no baseline comparison on T2 page
-
-    return goals.some((g) => {
-      const current = g.timepoints?.[tp] || {};
-      const baseline = g.timepoints?.["T2"] || {};
-      const improvedProgress = (current.Q39 ?? null) != null && (baseline.Q39 ?? null) != null && current.Q39 > baseline.Q39;
-      const improvedConfidence = (current.Q40 ?? null) != null && (baseline.Q40 ?? null) != null && current.Q40 > baseline.Q40;
-      const improvedImportance = (current.Q41 ?? null) != null && (baseline.Q41 ?? null) != null && current.Q41 > baseline.Q41;
-      return improvedProgress || improvedConfidence || improvedImportance;
-    });
-  }, [goals, tp, loading, isT2]);
-
-  // Fire only on transitions: false -> true (prevents repeating every rerender)
-  const prevAnyImprovedRef = React.useRef(false);
-  const [celebrateNow, setCelebrateNow] = useState(false);
+  const goalOptions = useMemo(() => {
+    return (goals || []).map((g) => ({
+      id: String(g.goal_id),
+      label: `Goal ${g.goal_id}`,
+      text: g.text,
+    }));
+  }, [goals]);
 
   useEffect(() => {
-    const prev = prevAnyImprovedRef.current;
-    prevAnyImprovedRef.current = anyImproved;
-
-    if (!prev && anyImproved) {
-      setCelebrateNow(true);
-      const t = setTimeout(() => setCelebrateNow(false), 50); // just a pulse to trigger overlay
-      return () => clearTimeout(t);
+    if (!goalFilter && goalOptions.length > 0) {
+      // default to ALL once we have data
+      setGoalFilter("ALL");
     }
-  }, [anyImproved]);
+  }, [goalFilter, goalOptions]);
 
-  void subtitle;
+  const filteredGoals = useMemo(() => {
+    if (!goalFilter) return [];
+    if (goalFilter === "ALL") return goals || [];
+    return (goals || []).filter((g) => String(g.goal_id) === String(goalFilter));
+  }, [goals, goalFilter]);
+
+  const onChangeGoal = (e) => {
+    setGoalFilter(e.target.value);
+
+    // playful, non-hostile animation
+    const el = cardRef.current;
+    if (el) {
+      el.classList.remove("party-wiggle");
+      // force reflow so animation restarts
+      void el.offsetWidth;
+      el.classList.add("party-wiggle");
+    }
+    setPartyKey((k) => k + 1);
+  };
 
   return (
     <HomeLayout user={user} onLogout={onLogout} title={`${tpLabel} Survey — Analysis`}>
-      <ProgressCelebration show={celebrateNow} />
-      <div style={card}>
-        {/* Filter bar: Goal only */}
+      <style>{css}</style>
+
+      <div ref={cardRef} style={card} className="partyCard">
+        {/* confetti burst */}
+        <ConfettiBurst key={partyKey} seed={partyKey} />
+
         <div style={row} className="filtersRowMobile">
           <label style={label}>
             Goal
-            <select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} style={select}>
-              <option value="1">Goal 1</option>
-              <option value="2">Goal 2</option>
-              <option value="3">Goal 3</option>
+            <select
+              value={goalFilter}
+              onChange={onChangeGoal}
+              style={select}
+              disabled={loading || goalOptions.length === 0}
+            >
+              <option value="ALL">All Goals</option>
+              {goalOptions.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>
 
         {!loading && !isT2 && (
           <div style={{ marginBottom: 16, fontSize: 13, opacity: 0.7 }}>
-            Showing change from Week 2 (baseline) → {tpLabel}.
-            Arrows show direction and magnitude of change.
+            Showing change from Week 2 (baseline) → {tpLabel}. Arrows show direction and magnitude of change.
           </div>
         )}
 
         {loading ? (
           <p style={muted}>Loading…</p>
-        ) : goals.length === 0 ? (
+        ) : filteredGoals.length === 0 ? (
           <p style={muted}>No data available for this survey (with current goal filter).</p>
         ) : (
           <table style={table} className="analysisTable">
@@ -189,9 +200,9 @@ export default function SurveyAnalysis({ user, onLogout }) {
               </tr>
             </thead>
             <tbody>
-              {goals.map((g) => {
-                const current = g.timepoints[tp] || {};
-                const baseline = g.timepoints["T2"] || {};
+              {filteredGoals.map((g) => {
+                const current = g.timepoints?.[tp] || {};
+                const baseline = g.timepoints?.["T2"] || {};
                 return (
                   <tr key={g.goal_id}>
                     <td style={{ ...td, fontWeight: 800 }} data-label="Goal">
@@ -230,12 +241,14 @@ export default function SurveyAnalysis({ user, onLogout }) {
 }
 
 const card = {
+  position: "relative",
   padding: 22,
   borderRadius: 16,
-  border: "1px solid rgba(155,183,255,0.16)",
-  background: "rgba(16, 25, 42, 0.65)",
+  border: "1px solid var(--card-border)",
+  background: "var(--card-bg)",
   boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
   backdropFilter: "blur(8px)",
+  overflow: "hidden",
 };
 
 const row = { display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 };
@@ -243,9 +256,9 @@ const label = { display: "grid", gap: 6, fontWeight: 800, fontSize: 13, opacity:
 const select = {
   padding: "10px 12px",
   borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)",
+  border: "1px solid var(--ghost-border)",
+  background: "var(--ghost-bg)",
+  color: "var(--ghost-color)",
   outline: "none",
 };
 
@@ -261,71 +274,38 @@ const td = { padding: "11px 14px", borderBottom: "1px solid rgba(155,183,255,0.0
 
 const pillLink = {
   padding: "10px 14px", borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.14)",
-  background: "rgba(255,255,255,0.06)",
-  color: "rgba(233,238,252,0.92)", fontWeight: 800,
+  border: "1px solid var(--ghost-border)",
+  background: "var(--ghost-bg)",
+  color: "var(--ghost-color)", fontWeight: 800,
   textDecoration: "none", display: "inline-flex",
   alignItems: "center",
 };
 
-const celeWrap = {
-  position: "fixed",
+const confettiWrap = {
+  position: "absolute",
   inset: 0,
   pointerEvents: "none",
-  zIndex: 9999,
+  overflow: "hidden",
 };
 
-const celeToast = {
-  position: "fixed",
-  top: 18,
-  left: "50%",
-  transform: "translateX(-50%)",
-  background: "rgba(16, 25, 42, 0.92)",
-  border: "1px solid rgba(155,183,255,0.20)",
-  boxShadow: "0 14px 40px rgba(0,0,0,0.45)",
-  backdropFilter: "blur(10px)",
-  color: "white",
-  borderRadius: 16,
-  padding: "12px 14px",
-  width: "min(520px, calc(100vw - 24px))",
-};
-
-const celeTitle = { fontSize: 16, fontWeight: 900, marginBottom: 2 };
-const celeBody = { fontSize: 14, opacity: 0.92 };
-
-const confettiCss = `
-.confetti-layer{
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
+const css = `
+.partyCard.party-wiggle {
+  animation: party-wiggle 560ms ease-in-out;
+  transform-origin: 50% 10%;
 }
-.confetti{
-  position: absolute;
-  top: -14px;
-  width: 10px;
-  height: 14px;
-  border-radius: 2px;
-  background: hsl(calc(360 * var(--h, 0)), 85%, 60%);
-  animation: confetti-fall 1.9s ease-out forwards;
-  will-change: transform, top, opacity;
-}
-.confetti:nth-child(6n+1){ --h: 0.05; }
-.confetti:nth-child(6n+2){ --h: 0.18; }
-.confetti:nth-child(6n+3){ --h: 0.33; }
-.confetti:nth-child(6n+4){ --h: 0.55; }
-.confetti:nth-child(6n+5){ --h: 0.72; }
-.confetti:nth-child(6n+6){ --h: 0.88; }
 
-.confetti:nth-child(odd){ animation-name: confetti-fall-left; }
-.confetti:nth-child(even){ animation-name: confetti-fall-right; }
-
-@keyframes confetti-fall-left{
-  0%   { transform: translate3d(0,0,0) rotate(0deg); opacity: 1; }
-  100% { transform: translate3d(-140px, 105vh, 0) rotate(720deg); opacity: 0; }
+@keyframes party-wiggle {
+  0%   { transform: translate3d(0,0,0) rotate(0deg); }
+  15%  { transform: translate3d(-6px,-2px,0) rotate(-2deg); }
+  30%  { transform: translate3d(7px,2px,0) rotate(2.6deg); }
+  45%  { transform: translate3d(-9px,1px,0) rotate(-3.2deg); }
+  60%  { transform: translate3d(8px,-1px,0) rotate(2.2deg); }
+  75%  { transform: translate3d(-4px,1px,0) rotate(-1.2deg); }
+  100% { transform: translate3d(0,0,0) rotate(0deg); }
 }
-@keyframes confetti-fall-right{
-  0%   { transform: translate3d(0,0,0) rotate(0deg); opacity: 1; }
-  100% { transform: translate3d(140px, 105vh, 0) rotate(720deg); opacity: 0; }
+
+@keyframes confetti-fly {
+  0%   { opacity: 1; transform: translate(-50%, 0) rotate(0deg); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), var(--dy)) rotate(var(--rot)); }
 }
 `;

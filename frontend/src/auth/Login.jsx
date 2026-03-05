@@ -150,9 +150,6 @@ export default function Login({ onLogin, onGoToRegister }) {
         </button>
 
         <div style={styles.footer}>
-          <small style={{ opacity: 0.8 }}>
-            Having trouble? Ask ChatGPT.
-          </small>
           <button type="button" onClick={onGoToRegister} style={styles.linkBtn}>
             Create account
           </button>
@@ -168,16 +165,16 @@ const styles = {
     display: "grid",
     placeItems: "center",
     padding: 16,
-    background: "#0b1220",
+    background: "var(--auth-page-bg)",
   },
   card: {
     width: "100%",
     maxWidth: 420,
     padding: 24,
     borderRadius: 14,
-    border: "1px solid #24314a",
-    background: "#10192a",
-    color: "#e9eefc",
+    border: "1px solid var(--auth-card-border)",
+    background: "var(--auth-card-bg)",
+    color: "var(--text-primary)",
     boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
   },
   header: { marginBottom: 16 },
@@ -187,9 +184,9 @@ const styles = {
   input: {
     padding: "10px 12px",
     borderRadius: 10,
-    border: "1px solid #2a3a58",
-    background: "#0b1220",
-    color: "#e9eefc",
+    border: "1px solid var(--input-border)",
+    background: "var(--input-bg)",
+    color: "var(--text-primary)",
     outline: "none",
   },
   pwRow: {
@@ -201,9 +198,9 @@ const styles = {
   pwToggle: {
     padding: "10px 12px",
     borderRadius: 10,
-    border: "1px solid #2a3a58",
-    background: "#0b1220",
-    color: "#e9eefc",
+    border: "1px solid var(--input-border)",
+    background: "var(--input-bg)",
+    color: "var(--text-primary)",
     cursor: "pointer",
     whiteSpace: "nowrap",
   },
@@ -232,7 +229,7 @@ const styles = {
   linkBtn: {
     border: "none",
     background: "transparent",
-    color: "#9bb7ff",
+    color: "#4f7cff",
     cursor: "pointer",
     padding: 0,
     textDecoration: "underline",

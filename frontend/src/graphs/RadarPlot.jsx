@@ -36,14 +36,24 @@ export default function RadarPlot({ goalIndex = 0, figure: prefetchedFigure }) {
     );
   }
 
+  // Empty figure (no traces) means backend returned no data — show a clean message
+  // instead of letting Plotly render a blank cartesian chart.
+  if (!figure.data || figure.data.length === 0) {
+    return (
+      <div style={styles.fallback}>
+        <p style={styles.noDataText}>No trait data available for this goal.</p>
+      </div>
+    );
+  }
+
   const layout = {
     ...figure.layout,
     autosize: true,
     width: undefined,
-    height: 500,
+    height: 540,
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
-    margin: { t: 80, l: 80, r: 80, b: 80 },
+    margin: { t: 120, l: 80, r: 80, b: 100 },
   };
 
   return (
@@ -52,6 +62,7 @@ export default function RadarPlot({ goalIndex = 0, figure: prefetchedFigure }) {
       layout={layout}
       config={{
         responsive: true,
+        scrollZoom: true,
         displayModeBar: true,
         displaylogo: false,
         modeBarButtonsToRemove: ["lasso2d", "select2d"],
@@ -88,5 +99,13 @@ const styles = {
     color: "#ff8a8a",
     fontSize: 14,
     fontWeight: 600,
+  },
+  noDataText: {
+    color: "#c8d6f0",
+    fontSize: 13,
+    opacity: 0.65,
+    textAlign: "center",
+    maxWidth: 220,
+    lineHeight: 1.5,
   },
 };

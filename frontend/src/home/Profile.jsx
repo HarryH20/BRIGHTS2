@@ -266,8 +266,8 @@ const styles = {
   card: {
     padding: 24,
     borderRadius: 16,
-    border: "1px solid rgba(155,183,255,0.16)",
-    background: "rgba(16, 25, 42, 0.65)",
+    border: "1px solid var(--card-border)",
+    background: "var(--card-bg)",
     boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
     backdropFilter: "blur(8px)",
     maxWidth: 800,
@@ -297,17 +297,17 @@ const styles = {
   value: {
     padding: "10px 12px",
     borderRadius: 10,
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.08)",
+    background: "var(--input-bg-glass)",
+    border: "1px solid var(--input-border-glass)",
   },
 
   input: {
     width: "100%",
     padding: "10px 12px",
     borderRadius: 10,
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    color: "#e9eefc",
+    background: "var(--input-bg-glass)",
+    border: "1px solid var(--input-border-glass)",
+    color: "var(--text-primary)",
     marginBottom: 10,
   },
 
@@ -327,8 +327,8 @@ const styles = {
     width: 80,
     height: 80,
     borderRadius: "50%",
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.14)",
+    background: "var(--ghost-bg)",
+    border: "1px solid var(--ghost-border)",
     display: "grid",
     placeItems: "center",
     fontSize: 12,
@@ -337,9 +337,9 @@ const styles = {
   button: {
     padding: "10px 14px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(233,238,252,0.9)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
     fontWeight: 700,
   },
 
@@ -348,7 +348,7 @@ const styles = {
   },
 
   backLink: {
-    color: "rgba(233,238,252,0.92)",
+    color: "var(--ghost-color)",
     fontWeight: 800,
     textDecoration: "none",
   },

@@ -10,6 +10,8 @@ import SurveyAnalysis from "./home/SurveyAnalysis.jsx";
 import GoalPage from "./home/GoalPage.jsx";
 import OverviewPage from "./home/OverviewPage.jsx";
 import GraphsPage from "./home/GraphsPage.jsx";
+import SurveyForm from "./home/SurveyForm.jsx";
+import AdminPage from "./admin/AdminPage.jsx";
 
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
@@ -17,10 +19,17 @@ function RequireAuth({ user, checking, children }) {
   return children;
 }
 
+const EMPTY_CHART_CACHE = { goals: [], roseFigure: null, radarFigures: {}, loaded: false };
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
+  const [chartCache, setChartCache] = useState(EMPTY_CHART_CACHE);
   const navigate = useNavigate();
+
+  function clearChartCache() {
+    setChartCache(EMPTY_CHART_CACHE);
+  }
 
   useEffect(() => {
     (async () => {
@@ -48,6 +57,7 @@ export default function App() {
       });
     } finally {
       setUser(null);
+      clearChartCache();
       navigate("/login", { replace: true });
     }
   }
@@ -97,7 +107,7 @@ export default function App() {
         path="/dashboard/*"
         element={
           <RequireAuth user={user} checking={checking}>
-            <Dashboard user={user} onLogout={handleLogout} />
+            <Dashboard user={user} onLogout={handleLogout} chartCache={chartCache} setChartCache={setChartCache} />
           </RequireAuth>
         }
       />
@@ -147,14 +157,33 @@ export default function App() {
           </RequireAuth>
         }
       />
+
         <Route
-    path="/graphs"
-    element={
-        <RequireAuth user={user} checking={checking}>
-            <GraphsPage user={user} onLogout={handleLogout} />
-        </RequireAuth>
+            path="/admin"
+            element={
+              <RequireAuth user={user} checking={checking}>
+                <AdminPage user={user} onLogout={handleLogout} />
+              </RequireAuth>
+            }
+        />
+
+        <Route
+            path="/graphs"
+            element={
+                <RequireAuth user={user} checking={checking}>
+                    <GraphsPage user={user} onLogout={handleLogout} />
+                </RequireAuth>
+                }
+            />
+
+      <Route
+        path="/survey"
+        element={
+          <RequireAuth user={user} checking={checking}>
+            <SurveyForm user={user} onLogout={handleLogout} onSurveyComplete={clearChartCache} />
+          </RequireAuth>
         }
-    />
+      />
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

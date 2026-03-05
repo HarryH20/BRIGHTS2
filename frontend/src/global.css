@@ -3,6 +3,51 @@
    Layered on top of inline styles — additive only
    ───────────────────────────────────────────── */
 
+/* ── Theme tokens ──────────────────────────── */
+:root {
+  --page-bg: radial-gradient(1200px 600px at 20% 0%, #172a52 0%, #0b1220 55%, #070b14 100%);
+  --auth-page-bg: #0b1220;
+  --card-bg: rgba(16, 25, 42, 0.65);
+  --header-bg: rgba(16, 25, 42, 0.75);
+  --auth-card-bg: #10192a;
+  --auth-card-border: #24314a;
+  --input-bg: #0b1220;
+  --input-bg-glass: rgba(255, 255, 255, 0.05);
+  --input-border: #2a3a58;
+  --input-border-glass: rgba(255, 255, 255, 0.12);
+  --surface-subtle: rgba(255, 255, 255, 0.03);
+  --card-border: rgba(155, 183, 255, 0.16);
+  --header-border: rgba(155, 183, 255, 0.18);
+  --subtle-border: rgba(155, 183, 255, 0.12);
+  --text-primary: #e9eefc;
+  --text-dim: rgba(233, 238, 252, 0.7);
+  --ghost-bg: rgba(255, 255, 255, 0.06);
+  --ghost-border: rgba(255, 255, 255, 0.14);
+  --ghost-color: rgba(233, 238, 252, 0.92);
+}
+
+[data-theme="light"] {
+  --page-bg: radial-gradient(1200px 600px at 20% 0%, #dde8ff 0%, #f0f4ff 55%, #f8f9fe 100%);
+  --auth-page-bg: #f0f4ff;
+  --card-bg: rgba(255, 255, 255, 0.75);
+  --header-bg: rgba(255, 255, 255, 0.85);
+  --auth-card-bg: #ffffff;
+  --auth-card-border: #c8d4f0;
+  --input-bg: #f0f4ff;
+  --input-bg-glass: rgba(0, 0, 0, 0.04);
+  --input-border: #c0cce8;
+  --input-border-glass: rgba(0, 0, 0, 0.1);
+  --surface-subtle: rgba(0, 0, 0, 0.025);
+  --card-border: rgba(79, 124, 255, 0.18);
+  --header-border: rgba(79, 124, 255, 0.2);
+  --subtle-border: rgba(79, 124, 255, 0.12);
+  --text-primary: #0f172a;
+  --text-dim: rgba(15, 23, 42, 0.6);
+  --ghost-bg: rgba(0, 0, 0, 0.05);
+  --ghost-border: rgba(0, 0, 0, 0.12);
+  --ghost-color: rgba(15, 23, 42, 0.88);
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -17,6 +62,7 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  color: var(--text-primary);
 }
 
 /* ── Buttons ────────────────────────────────── */
@@ -104,8 +150,13 @@ tr:hover td {
   animation: page-fade-in 0.35s ease forwards;
 }
 
-/* ── Select option dark theme ───────────────── */
+/* ── Select option theme ────────────────────── */
 select option {
   background: #0b1220;
   color: #e9eefc;
+}
+
+[data-theme="light"] select option {
+  background: #f0f4ff;
+  color: #0f172a;
 }

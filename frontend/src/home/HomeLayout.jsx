@@ -1,14 +1,23 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { useTheme } from "../ThemeContext.jsx";
 
 export default function HomeLayout({ user, onLogout, title, rightSlot, children }) {
   const name = user?.username || "user";
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <div style={styles.page}>
       <header style={styles.header}>
         <div style={styles.left}>
           <Link to="/profile" style={styles.linkBtn}>
+            {user?.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt="avatar"
+                style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", marginRight: 8, flexShrink: 0 }}
+              />
+            ) : null}
             Profile / Settings
           </Link>
         </div>
@@ -19,6 +28,12 @@ export default function HomeLayout({ user, onLogout, title, rightSlot, children 
         </div>
 
         <div style={styles.right}>
+          {user?.role === "admin" && (
+            <Link to="/admin" style={styles.adminBtn}>Admin</Link>
+          )}
+          <button type="button" onClick={toggleTheme} style={styles.themeBtn} aria-label="Toggle theme">
+            {theme === "dark" ? "☀ Light" : "🌙 Dark"}
+          </button>
           <button type="button" onClick={onLogout} style={styles.logoutBtn}>
             Logout
           </button>
@@ -49,39 +64,62 @@ export default function HomeLayout({ user, onLogout, title, rightSlot, children 
 export const styles = {
   page: {
     minHeight: "100vh",
-    background:
-      "radial-gradient(1200px 600px at 20% 0%, #172a52 0%, #0b1220 55%, #070b14 100%)",
-    color: "#e9eefc",
+    background: "var(--page-bg)",
+    color: "var(--text-primary)",
     padding: 24,
   },
   header: {
     maxWidth: 1100,
     margin: "0 auto 18px",
     display: "grid",
+    gridTemplateColumns: "1fr auto 1fr",
     alignItems: "center",
     gap: 16,
     padding: 18,
     borderRadius: 16,
-    border: "1px solid rgba(155,183,255,0.18)",
-    background: "rgba(16, 25, 42, 0.75)",
+    border: "1px solid var(--header-border)",
+    background: "var(--header-bg)",
     boxShadow: "0 18px 40px rgba(0,0,0,0.35)",
     backdropFilter: "blur(8px)",
   },
   left: { display: "flex", justifyContent: "flex-start" },
   center: { textAlign: "center" },
-  right: { display: "flex", justifyContent: "flex-end" },
+  right: { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 },
   h1: { margin: 0, fontSize: 28, letterSpacing: 0.2 },
 
   linkBtn: {
     padding: "10px 14px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255,255,255,0.06)",
-    color: "rgba(233,238,252,0.92)",
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
     textDecoration: "none",
     fontWeight: 700,
     display: "inline-flex",
     alignItems: "center",
+  },
+
+  themeBtn: {
+    padding: "8px 12px",
+    borderRadius: 12,
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
+    cursor: "pointer",
+    fontWeight: 700,
+    fontSize: 13,
+    whiteSpace: "nowrap",
+  },
+
+  adminBtn: {
+    padding: "10px 14px",
+    borderRadius: 12,
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
+    textDecoration: "none",
+    fontWeight: 700,
+    fontSize: 13,
   },
 
   logoutBtn: {
