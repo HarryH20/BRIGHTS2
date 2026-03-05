@@ -121,6 +121,7 @@ def audit_log():
                 "event_type": e.event_type,
                 "detail": e.detail,
                 "ip_address": e.ip_address,
+                "user_agent": e.user_agent,
                 "request_id": e.request_id,
                 "timestamp": e.timestamp.isoformat() if e.timestamp else None,
             }
@@ -164,6 +165,7 @@ def sessions():
                 "logout_at": e.logout_at.isoformat() if e.logout_at else None,
                 "duration_seconds": e.duration_seconds,
                 "ip_address": e.ip_address,
+                "user_agent": e.user_agent,
             }
             for e in entries
         ],

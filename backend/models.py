@@ -70,6 +70,7 @@ class AuditLog(db.Model):
     event_type = db.Column(db.String(50), nullable=False, index=True)
     detail = db.Column(db.Text, nullable=True)
     ip_address = db.Column(db.String(45), nullable=True)  # IPv6 max length
+    user_agent = db.Column(db.String(300), nullable=True)
     request_id = db.Column(db.String(36), nullable=True)
     timestamp = db.Column(db.DateTime, nullable=False, default=utcnow)
 
@@ -99,6 +100,7 @@ class SessionLog(db.Model):
     logout_at = db.Column(db.DateTime, nullable=True)
     duration_seconds = db.Column(db.Integer, nullable=True)
     ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.String(300), nullable=True)
 
     def record_logout(self):
         """Set logout time and compute session duration."""

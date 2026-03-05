@@ -18,6 +18,27 @@ const EVENT_TYPES = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function parseDevice(ua) {
+  if (!ua) return "—";
+  const s = ua.toLowerCase();
+  // OS
+  let os = "Unknown";
+  if (s.includes("iphone"))           os = "iPhone";
+  else if (s.includes("ipad"))        os = "iPad";
+  else if (s.includes("android"))     os = "Android";
+  else if (s.includes("windows nt"))  os = "Windows";
+  else if (s.includes("mac os x"))    os = "macOS";
+  else if (s.includes("linux"))       os = "Linux";
+  // Browser
+  let browser = "";
+  if (s.includes("edg/"))             browser = "Edge";
+  else if (s.includes("opr/") || s.includes("opera")) browser = "Opera";
+  else if (s.includes("chrome/"))     browser = "Chrome";
+  else if (s.includes("firefox/"))    browser = "Firefox";
+  else if (s.includes("safari/"))     browser = "Safari";
+  return browser ? `${os} · ${browser}` : os;
+}
+
 function fmtTs(iso) {
   if (!iso) return "—";
   return new Date(iso).toLocaleString();
@@ -98,14 +119,13 @@ function UserSearch({ users, value, onChange }) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Show all users when no query, filtered list when typing
   const filtered = query.trim()
-    ? users
-        .filter((u) =>
-          u.username.toLowerCase().includes(query.toLowerCase()) ||
-          String(u.id).includes(query)
-        )
-        .slice(0, 8)
-    : [];
+    ? users.filter((u) =>
+        u.username.toLowerCase().includes(query.toLowerCase()) ||
+        String(u.id).includes(query)
+      )
+    : users;
 
   function select(u) {
     setQuery(`${u.username} (#${u.id})`);
@@ -113,9 +133,14 @@ function UserSearch({ users, value, onChange }) {
     onChange(String(u.id));
   }
 
-  function clear() {
+  function selectAll() {
     setQuery("");
     setOpen(false);
+    onChange("all");
+  }
+
+  function clear() {
+    setQuery("");
     onChange("all");
   }
 
@@ -125,7 +150,7 @@ function UserSearch({ users, value, onChange }) {
         <input
           style={styles.searchInput}
           type="text"
-          placeholder="Search user..."
+          placeholder="Search or browse users…"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -134,25 +159,43 @@ function UserSearch({ users, value, onChange }) {
           }}
           onFocus={() => setOpen(true)}
         />
-        {query && (
-          <button style={styles.clearBtn} onClick={clear} title="Clear">
-            ×
-          </button>
+        {query ? (
+          <button style={styles.clearBtn} onClick={clear} title="Clear">×</button>
+        ) : (
+          <span style={{ ...styles.clearBtn, cursor: "default", pointerEvents: "none", fontSize: 11, opacity: 0.4 }}>
+            ▾
+          </span>
         )}
       </div>
-      {open && filtered.length > 0 && (
+      {open && (
         <div style={styles.searchDropdown}>
+          {/* Always-visible "All users" option */}
+          <div
+            style={{
+              ...styles.searchOption,
+              ...(value === "all" ? styles.searchOptionActive : {}),
+              borderBottom: "1px solid var(--subtle-border)",
+            }}
+            onMouseDown={selectAll}
+          >
+            <span style={{ fontWeight: 700 }}>All users</span>
+            <span style={{ opacity: 0.45, marginLeft: 6, fontSize: 11 }}>{users.length} total</span>
+          </div>
+          {filtered.length === 0 && (
+            <div style={{ ...styles.searchOption, opacity: 0.45 }}>No matches</div>
+          )}
           {filtered.map((u) => (
             <div
               key={u.id}
-              style={styles.searchOption}
+              style={{
+                ...styles.searchOption,
+                ...(String(u.id) === value ? styles.searchOptionActive : {}),
+              }}
               onMouseDown={() => select(u)}
             >
               <span style={{ fontWeight: 700 }}>{u.username}</span>
               <span style={{ opacity: 0.55, marginLeft: 6 }}>#{u.id}</span>
-              {u.role === "admin" && (
-                <span style={styles.roleTag}>admin</span>
-              )}
+              {u.role === "admin" && <span style={styles.roleTag}>admin</span>}
             </div>
           ))}
         </div>
@@ -371,7 +414,7 @@ function AuditLogTab() {
         <table style={styles.table}>
           <thead>
             <tr>
-              {["Timestamp", "Event", "User ID", "Detail", "IP"].map((h) => (
+              {["Timestamp", "Event", "User ID", "Detail", "IP", "Device"].map((h) => (
                 <th key={h} style={styles.th}>{h}</th>
               ))}
             </tr>
@@ -390,14 +433,17 @@ function AuditLogTab() {
                   </span>
                 </td>
                 <td style={styles.td}>{e.user_id ?? "—"}</td>
-                <td style={{ ...styles.td, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <td style={{ ...styles.td, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {e.detail ?? "—"}
                 </td>
                 <td style={{ ...styles.td, fontFamily: "monospace", fontSize: 12 }}>{e.ip_address ?? "—"}</td>
+                <td style={{ ...styles.td, whiteSpace: "nowrap" }} title={e.user_agent ?? ""}>
+                  {parseDevice(e.user_agent)}
+                </td>
               </tr>
             ))}
             {entries.length === 0 && !loading && (
-              <tr><td colSpan={5} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No entries</td></tr>
+              <tr><td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No entries</td></tr>
             )}
           </tbody>
         </table>
@@ -465,7 +511,7 @@ function SessionsTab() {
         <table style={styles.table}>
           <thead>
             <tr>
-              {["User ID", "Login At", "Logout At", "Duration", "IP"].map((h) => (
+              {["User ID", "Login At", "Logout At", "Duration", "IP", "Device"].map((h) => (
                 <th key={h} style={styles.th}>{h}</th>
               ))}
             </tr>
@@ -480,10 +526,13 @@ function SessionsTab() {
                   {fmtDuration(e.duration_seconds)}
                 </td>
                 <td style={{ ...styles.td, fontFamily: "monospace", fontSize: 12 }}>{e.ip_address ?? "—"}</td>
+                <td style={{ ...styles.td, whiteSpace: "nowrap" }} title={e.user_agent ?? ""}>
+                  {parseDevice(e.user_agent)}
+                </td>
               </tr>
             ))}
             {entries.length === 0 && !loading && (
-              <tr><td colSpan={5} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No sessions</td></tr>
+              <tr><td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No sessions</td></tr>
             )}
           </tbody>
         </table>
@@ -907,6 +956,8 @@ const styles = {
     borderRadius: 10,
     boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
     overflow: "hidden",
+    overflowY: "auto",
+    maxHeight: 280,
     marginTop: 2,
   },
   searchOption: {
@@ -917,6 +968,10 @@ const styles = {
     alignItems: "center",
     color: "var(--text-primary)",
     transition: "background 0.1s",
+  },
+  searchOptionActive: {
+    background: "#7b9eff18",
+    color: "var(--text-primary)",
   },
   roleTag: {
     marginLeft: "auto",

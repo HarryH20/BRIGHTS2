@@ -17,12 +17,18 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 # HELPERS
 # =============================================================================
 def _get_ip():
-    """Get client IP, respecting X-Forwarded-For behind a proxy."""
-    return request.headers.get("X-Forwarded-For", request.remote_addr)
+    """Get client IP. ProxyFix middleware already unwraps X-Forwarded-For into remote_addr."""
+    return request.remote_addr
 
 
 def _get_request_id():
     return getattr(g, "request_id", None)
+
+
+def _get_ua():
+    """Get User-Agent header, truncated to 300 chars."""
+    ua = request.headers.get("User-Agent", "")
+    return ua[:300] if ua else None
 
 
 def _audit(event_type, user_id=None, detail=None):
@@ -33,6 +39,7 @@ def _audit(event_type, user_id=None, detail=None):
             event_type=event_type,
             detail=detail,
             ip_address=_get_ip(),
+            user_agent=_get_ua(),
             request_id=_get_request_id(),
         )
         db.session.add(entry)
@@ -263,6 +270,7 @@ def login():
             user_id=user.id,
             login_at=datetime.now(timezone.utc),
             ip_address=_get_ip(),
+            user_agent=_get_ua(),
         )
         db.session.add(session_entry)
         db.session.commit()
@@ -330,13 +338,15 @@ def logout():
 
 
 @auth_bp.route("/me", methods=["GET"])
-@login_required
 def me():
     """
     Get current authenticated user info.
 
-    GET /auth/me
+    GET /auth/me — returns 401 silently if not logged in (used as session check on app load).
     """
+    if not session.get("user_id"):
+        return jsonify({"error": "Not authenticated"}), 401
+
     user = db.session.get(User, session["user_id"])
 
     if not user:
