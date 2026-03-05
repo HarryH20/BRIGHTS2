@@ -89,7 +89,7 @@ def get_goals():
     return jsonify({"goals": goals_out})
 
 
-_ALLOWED_GRAPHS = {"roseplot", "radarplot"}
+_ALLOWED_GRAPHS = {"roseplot", "radarplot", "ageplot", "solodivergingstackedbarchart"}
 
 
 @viz_bp.route("/<graph_name>")
