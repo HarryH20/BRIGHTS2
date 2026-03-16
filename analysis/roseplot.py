@@ -83,16 +83,12 @@ def fetch_data(user_id, engine, goal_id=None, weeks=None, **_ignored):
         "selected_weeks": [2,3,4,5,6],
         "goal_id": int|None
       }
-
-    Scores are averaged across the selected goals for each selected week.
-    Weeks not selected are returned as None so build_figure keeps its 6x3 grid stable.
     """
     if not user_id:
         return None
 
     selected_weeks = _parse_weeks(weeks)
 
-    # goal_id is now goal_index (1, 2, 3)
     goal_index = None
     if goal_id not in (None, "", "all"):
         try:
@@ -128,24 +124,25 @@ def fetch_data(user_id, engine, goal_id=None, weeks=None, **_ignored):
         t = m["timepoint"]
         if t not in selected_weeks:
             continue
+
         q = f"Q{m['question_number']}"
         try:
             totals[t][q].append(int(m["response_value"]))
         except (ValueError, TypeError):
             pass
 
-    # Always return T2..T6 keys so the plot grid doesn't change shape
     scores = {}
     for t in range(2, 7):
         scores[t] = {}
         for q in ("Q39", "Q40", "Q41"):
-            if t not in selected_weeks:
-                scores[t][q] = None
-                continue
             vals = totals[t][q]
             scores[t][q] = round(sum(vals) / len(vals)) if vals else None
 
-    return {"scores": scores, "selected_weeks": selected_weeks, "goal_id": goal_index}
+    return {
+        "scores": scores,
+        "selected_weeks": selected_weeks,
+        "goal_id": goal_index,
+    }
 
 
 def _score_to_angle(score):
@@ -154,13 +151,13 @@ def _score_to_angle(score):
 
 def build_figure(data):
     """
-    Build the 6x3 rose plot grid as a Plotly figure dict.
+    Build a rose plot figure that only includes panels with data.
 
-    Layout:
-      Rows 1-5: T2..T6 per question
-      Row 6: distribution summary across *selected* weeks
+    Panels included:
+      - One panel for each (timepoint, question) combo that has a score
+      - One summary panel per question if selected weeks contain any scores
 
-    Returns an empty figure with a message if data is None/empty.
+    Returns an empty figure with a message if nothing is available.
     """
     if not data:
         fig = go.Figure()
@@ -176,7 +173,6 @@ def build_figure(data):
         )
         return fig.to_dict()
 
-    # Backwards-compatible: allow old shape {2:{...},...} too
     if isinstance(data, dict) and "scores" in data:
         scores = data["scores"]
         selected_weeks = data.get("selected_weeks", [2, 3, 4, 5, 6])
@@ -184,28 +180,72 @@ def build_figure(data):
         scores = data
         selected_weeks = [2, 3, 4, 5, 6]
 
-    subplot_titles = []
+    panels = []
+
     for t in range(2, 7):
-        for q_label in QUESTION_LABELS.values():
-            subplot_titles.append(f"<b>T{t}: {q_label}</b>")
-    for q_label in QUESTION_LABELS.values():
-        subplot_titles.append(f"<b>Selected weeks: {q_label}</b>")
+        for q_key, q_label in QUESTION_LABELS.items():
+            score = (scores.get(t) or {}).get(q_key)
+            if score is not None:
+                panels.append(
+                    {
+                        "kind": "timepoint",
+                        "title": f"<b>T{t}: {q_label}</b>",
+                        "timepoint": t,
+                        "q_key": q_key,
+                        "score": score,
+                    }
+                )
+
+    for q_key, q_label in QUESTION_LABELS.items():
+        timepoint_scores = [
+            (scores.get(t) or {}).get(q_key)
+            for t in selected_weeks
+            if (scores.get(t) or {}).get(q_key) is not None
+        ]
+        if timepoint_scores:
+            panels.append(
+                {
+                    "kind": "summary",
+                    "title": f"<b>Selected weeks: {q_label}</b>",
+                    "q_key": q_key,
+                    "scores": timepoint_scores,
+                }
+            )
+
+    if not panels:
+        fig = go.Figure()
+        fig.update_layout(
+            title=dict(
+                text="No data available for the selected filters",
+                x=0.5,
+                xanchor="center",
+                font=dict(color="#e9eefc", size=18),
+            ),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        return fig.to_dict()
+
+    cols = 3
+    rows = (len(panels) + cols - 1) // cols
 
     fig = make_subplots(
-        rows=6,
-        cols=3,
-        specs=[[{"type": "polar"}] * 3 for _ in range(6)],
-        subplot_titles=subplot_titles,
+        rows=rows,
+        cols=cols,
+        specs=[[{"type": "polar"} for _ in range(cols)] for _ in range(rows)],
+        subplot_titles=[panel["title"] for panel in panels],
         vertical_spacing=0.10,
         horizontal_spacing=0.05,
     )
 
-    # Rows 1-5: one bar per timepoint per question
-    for row_idx, t in enumerate(range(2, 7), start=1):
-        for col_idx, (q_key, _) in enumerate(QUESTION_LABELS.items(), start=1):
-            score = (scores.get(t) or {}).get(q_key)
-            if score is None:
-                continue
+    for i, panel in enumerate(panels):
+        row = (i // cols) + 1
+        col = (i % cols) + 1
+
+        if panel["kind"] == "timepoint":
+            score = panel["score"]
+            t = panel["timepoint"]
+
             fig.add_trace(
                 go.Barpolar(
                     r=[1],
@@ -220,44 +260,36 @@ def build_figure(data):
                     hoverinfo="text",
                     showlegend=False,
                 ),
-                row=row_idx,
-                col=col_idx,
+                row=row,
+                col=col,
             )
 
-    # Row 6: summary distribution across *selected* weeks
-    for col_idx, (q_key, _) in enumerate(QUESTION_LABELS.items(), start=1):
-        timepoint_scores = [
-            (scores.get(t) or {}).get(q_key)
-            for t in selected_weeks
-            if (scores.get(t) or {}).get(q_key) is not None
-        ]
-        if not timepoint_scores:
-            continue
+        elif panel["kind"] == "summary":
+            counts = Counter(panel["scores"])
+            max_count = max(counts.values())
 
-        counts = Counter(timepoint_scores)
-        max_count = max(counts.values())
-        for score, count in counts.items():
-            height = (count / max_count) ** 0.5
-            fig.add_trace(
-                go.Barpolar(
-                    r=[height],
-                    theta=[_score_to_angle(score)],
-                    width=25,
-                    marker=dict(
-                        color=SCORE_COLORS[score],
-                        line=dict(color="white", width=2),
-                        opacity=0.9,
+            for score, count in counts.items():
+                height = (count / max_count) ** 0.5
+                fig.add_trace(
+                    go.Barpolar(
+                        r=[height],
+                        theta=[_score_to_angle(score)],
+                        width=25,
+                        marker=dict(
+                            color=SCORE_COLORS[score],
+                            line=dict(color="white", width=2),
+                            opacity=0.9,
+                        ),
+                        hovertext=(
+                            f"{LIKERT_LABELS[score]}: {count}/{len(panel['scores'])} times "
+                            f"({count / len(panel['scores']) * 100:.0f}%)"
+                        ),
+                        hoverinfo="text",
+                        showlegend=False,
                     ),
-                    hovertext=(
-                        f"{LIKERT_LABELS[score]}: {count}/{len(timepoint_scores)} times "
-                        f"({count / len(timepoint_scores) * 100:.0f}%)"
-                    ),
-                    hoverinfo="text",
-                    showlegend=False,
-                ),
-                row=6,
-                col=col_idx,
-            )
+                    row=row,
+                    col=col,
+                )
 
     angular_ticktext = [
         "Strongly<br>disagree",
@@ -269,30 +301,32 @@ def build_figure(data):
         "Strongly<br>agree",
     ]
 
-    for row in range(1, 7):
-        for col in range(1, 4):
-            fig.update_polars(
-                radialaxis=dict(
-                    range=[0, 1.3],
-                    showticklabels=False,
-                    showline=False,
-                    gridcolor="rgba(200,200,200,0.3)",
-                    gridwidth=1,
-                ),
-                angularaxis=dict(
-                    direction="clockwise",
-                    rotation=180,
-                    tickmode="array",
-                    tickvals=[0, 30, 60, 90, 120, 150, 180],
-                    ticktext=angular_ticktext,
-                    showline=False,
-                    gridcolor="rgba(200,200,200,0.3)",
-                    tickfont=dict(size=9, color="#c8d6f0"),
-                ),
-                bgcolor="rgba(255,255,255,0)",
-                row=row,
-                col=col,
-            )
+    for i in range(len(panels)):
+        row = (i // cols) + 1
+        col = (i % cols) + 1
+
+        fig.update_polars(
+            radialaxis=dict(
+                range=[0, 1.3],
+                showticklabels=False,
+                showline=False,
+                gridcolor="rgba(200,200,200,0.3)",
+                gridwidth=1,
+            ),
+            angularaxis=dict(
+                direction="clockwise",
+                rotation=180,
+                tickmode="array",
+                tickvals=[0, 30, 60, 90, 120, 150, 180],
+                ticktext=angular_ticktext,
+                showline=False,
+                gridcolor="rgba(200,200,200,0.3)",
+                tickfont=dict(size=9, color="#c8d6f0"),
+            ),
+            bgcolor="rgba(255,255,255,0)",
+            row=row,
+            col=col,
+        )
 
     fig.update_layout(
         title=dict(
@@ -304,7 +338,7 @@ def build_figure(data):
             xanchor="center",
             font=dict(size=20, color="#e9eefc"),
         ),
-        height=2400,
+        height=max(700, rows * 380),
         width=1200,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -313,9 +347,6 @@ def build_figure(data):
     )
 
     for annotation in (fig.layout.annotations or []):
-        text = getattr(annotation, "text", "") or ""
-        if any(kw in text for kw in ["T2:", "T3:", "T4:", "T5:", "T6:", "Selected weeks:"]):
-            annotation.y = (annotation.y or 0) - 0.095
-            annotation.font = dict(color="#c8d6f0", size=12)
+        annotation.font = dict(color="#c8d6f0", size=12)
 
     return fig.to_dict()
