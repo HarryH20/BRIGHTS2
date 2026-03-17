@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import HomeLayout from "../home/HomeLayout.jsx";
 import RosePlot from "../graphs/RosePlot.jsx";
+import AdminDivergingPlot from "../graphs/AdminDivergingPlot.jsx";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TABS = ["Overview", "Stats", "Audit Log", "Sessions", "Questions"];
+const TABS = ["Overview", "Goal Progress", "Stats", "Audit Log", "Sessions", "Questions"];
 const FORM_TYPES = ["t1", "t2", "t3t5", "t6"];
 const EVENT_TYPES = [
   "LOGIN_SUCCESS",
@@ -270,6 +271,77 @@ function OverviewTab({ users }) {
           <div style={styles.errorText}>{error}</div>
         ) : (
           <RosePlot figure={figure} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Goal Progress ───────────────────────────────────────────────────────
+
+function GoalProgressTab({ users }) {
+  const [userId, setUserId] = useState("all");
+  const [goals, setGoals] = useState("1,2,3");
+  const [weeks, setWeeks] = useState("2,3,4,5,6");
+  const [figure, setFigure] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    setFigure(null);
+
+    const qs = new URLSearchParams({ user_id: userId, goals, weeks }).toString();
+    fetch(`/api/admin/divergingstackedbarchart?${qs}`, { credentials: "include" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Chart fetch failed: ${r.status}`);
+        return r.json();
+      })
+      .then((fig) => { if (!cancelled) setFigure(fig); })
+      .catch((e) => { if (!cancelled) setError(e.message); });
+
+    return () => { cancelled = true; };
+  }, [userId, goals, weeks]);
+
+  return (
+    <div style={styles.tabContent}>
+      <div style={styles.filterRow}>
+        <label style={styles.filterLabel}>
+          User
+          <UserSearch users={users} value={userId} onChange={setUserId} />
+        </label>
+
+        <label style={styles.filterLabel}>
+          Goal
+          <select value={goals} onChange={(e) => setGoals(e.target.value)} style={styles.select}>
+            <option value="1,2,3">All goals</option>
+            <option value="1">Goal 1</option>
+            <option value="2">Goal 2</option>
+            <option value="3">Goal 3</option>
+          </select>
+        </label>
+
+        <label style={styles.filterLabel}>
+          Weeks
+          <select value={weeks} onChange={(e) => setWeeks(e.target.value)} style={styles.select}>
+            <option value="2,3,4,5,6">Weeks 2–6</option>
+            <option value="3,4,5,6">Weeks 3–6</option>
+            <option value="4,5,6">Weeks 4–6</option>
+            <option value="5,6">Weeks 5–6</option>
+            <option value="2">Week 2 only</option>
+            <option value="3">Week 3 only</option>
+            <option value="4">Week 4 only</option>
+            <option value="5">Week 5 only</option>
+            <option value="6">Week 6 only</option>
+          </select>
+        </label>
+      </div>
+
+      <div style={styles.plotWrap}>
+        {error ? (
+          <div style={styles.errorText}>{error}</div>
+        ) : (
+          <AdminDivergingPlot figure={figure} />
         )}
       </div>
     </div>
@@ -815,6 +887,7 @@ export default function AdminPage({ user, onLogout }) {
         <TabBar active={activeTab} onChange={setActiveTab} />
 
         {activeTab === "Overview" && <OverviewTab users={users} />}
+        {activeTab === "Goal Progress" && <GoalProgressTab users={users} />}
         {activeTab === "Stats" && <StatsTab />}
         {activeTab === "Audit Log" && <AuditLogTab />}
         {activeTab === "Sessions" && <SessionsTab />}
