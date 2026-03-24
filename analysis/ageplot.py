@@ -1,4 +1,3 @@
-# backend/ageplot.py
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -8,14 +7,6 @@ import sqlalchemy
 
 
 def _to_int_age(raw: Any) -> Optional[int]:
-    """
-    Convert GoalIntervention."Age" (stored as text) into an integer age.
-
-    Handles cases like:
-      "23", " 23 ", "23.0", "Age: 23", "23 years", "23yrs"
-    Ignores:
-      None, "", "NA", "unknown", etc.
-    """
     if raw is None:
         return None
 
@@ -26,35 +17,29 @@ def _to_int_age(raw: Any) -> Optional[int]:
     if s.lower() in {"na", "n/a", "null", "none", "unknown", "unk", "missing"}:
         return None
 
-    # Find the first number in the string (supports decimals)
-    m = re.search(r"(\d+(\.\d+)?)", s)
-    if not m:
+    match = re.search(r"(\d+(\.\d+)?)", s)
+    if not match:
         return None
 
     try:
-        val = float(m.group(1))
+        value = float(match.group(1))
     except Exception:
         return None
 
-    if np.isnan(val) or np.isinf(val):
+    if np.isnan(value) or np.isinf(value):
         return None
 
-    age = int(round(val))
-    return age
+    return int(round(value))
 
 
 def _build_bins(min_age: int, max_age: int, bin_size: int) -> Tuple[List[str], List[Tuple[int, int]]]:
-    """
-    Create inclusive label bins like 0-4, 5-9, ...
-    max_age is treated as an exclusive upper bound for bin assignment (i.e., age >= max_age => overflow).
-    """
     if bin_size <= 0:
-        raise ValueError("bin_size must be > 0")
+        raise ValueError("bin_size must be greater than 0")
     if min_age >= max_age:
-        raise ValueError("min_age must be < max_age")
+        raise ValueError("min_age must be less than max_age")
 
-    bins: List[Tuple[int, int]] = []
     labels: List[str] = []
+    bins: List[Tuple[int, int]] = []
 
     start = min_age
     while start < max_age:
@@ -66,29 +51,26 @@ def _build_bins(min_age: int, max_age: int, bin_size: int) -> Tuple[List[str], L
     return labels, bins
 
 
-def fetch_data(
-    engine,
-    participant_id: Optional[str] = None,
-    goal_id: Optional[str] = None,
-    **kwargs,
-) -> Dict[str, Any]:
+def fetch_data(user_id, engine, goal_id=None, **kwargs) -> Dict[str, Any]:
     """
-    Fetch ages from GoalIntervention and return histogram-ready data.
+    Matches your existing graph system:
+        fetch_data(user_id, engine, **kwargs)
 
-    Optional filters:
-      participant_id -> filters by "ID" (participant id in your schema)
-      goal_id        -> filters by "GoalID"
-
-    Optional histogram params (via kwargs):
-      bin_size (int, default 5)
-      min_age  (int, default 0)
-      max_age  (int, default 100)
-      include_under_overflow (bool, default True)
+    This version uses the working SQL logic you tested:
+    - removes NULL ages
+    - removes blank/whitespace-only ages
+    - keeps only numeric-looking age values
     """
+
     bin_size = int(kwargs.get("bin_size", 5))
     min_age = int(kwargs.get("min_age", 0))
     max_age = int(kwargs.get("max_age", 100))
-    include_under_overflow = bool(kwargs.get("include_under_overflow", True))
+
+    include_under_overflow_raw = kwargs.get("include_under_overflow", True)
+    if isinstance(include_under_overflow_raw, str):
+        include_under_overflow = include_under_overflow_raw.lower() in {"true", "1", "yes", "y"}
+    else:
+        include_under_overflow = bool(include_under_overflow_raw)
 
     labels, bins = _build_bins(min_age, max_age, bin_size)
     counts = [0] * len(bins)
@@ -98,28 +80,27 @@ def fetch_data(
     unknown = 0
     total_parsed = 0
 
-    # Build SQL with optional filters (kept similar to your other module style)
-    where = ['"Age" IS NOT NULL', 'TRIM("Age") != \'\'']
+    where_clauses = [
+        '"Age" IS NOT NULL',
+        'TRIM("Age") <> \'\'',
+        r'''TRIM("Age") ~ '^[0-9]+(\.[0-9]+)?$' ''',
+    ]
     params: Dict[str, Any] = {}
 
-    if participant_id:
-        where.append('"ID" = :pid')
-        params["pid"] = participant_id
-
-    if goal_id:
-        where.append('"GoalID" = :gid')
-        params["gid"] = goal_id
+    if goal_id is not None and str(goal_id).strip() != "":
+        where_clauses.append('"GoalID" = :gid')
+        params["gid"] = str(goal_id)
 
     sql = f"""
         SELECT "Age"
         FROM "GoalIntervention"
-        WHERE {" AND ".join(where)}
+        WHERE {" AND ".join(where_clauses)}
+        ORDER BY CAST(TRIM("Age") AS NUMERIC)
     """
 
     with engine.connect() as conn:
         rows = conn.execute(sqlalchemy.text(sql), params).fetchall()
 
-    # Parse and bin
     for row in rows:
         raw_age = row[0]
         age = _to_int_age(raw_age)
@@ -128,8 +109,6 @@ def fetch_data(
             unknown += 1
             continue
 
-        # Basic sanity filter (helps remove accidental IDs, etc.)
-        # Adjust these limits if your dataset includes younger/older participants.
         if age < 0 or age > 120:
             unknown += 1
             continue
@@ -146,9 +125,9 @@ def fetch_data(
                 overflow += 1
             continue
 
-        idx = (age - min_age) // bin_size
-        if 0 <= idx < len(counts):
-            counts[idx] += 1
+        index = (age - min_age) // bin_size
+        if 0 <= index < len(counts):
+            counts[index] += 1
 
     return {
         "title": "Age Distribution",
@@ -163,19 +142,13 @@ def fetch_data(
         "underflow": underflow,
         "overflow": overflow,
         "filters": {
-            "participant_id": participant_id,
-            "goal_id": goal_id,
+            "user_id": str(user_id) if user_id is not None else None,
+            "goal_id": str(goal_id) if goal_id is not None else None,
         },
     }
 
 
 def build_figure(data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Build a Plotly bar chart for age distribution.
-
-    Expects data from fetch_data().
-    Returns fig.to_dict() for JSON serialization.
-    """
     if not data:
         fig = go.Figure()
         fig.update_layout(
@@ -208,15 +181,15 @@ def build_figure(data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         )
     )
 
-    subtitle_bits = [f"parsed={total_parsed}", f"unknown={unknown}"]
+    subtitle_parts = [f"parsed={total_parsed}", f"unknown={unknown}"]
     if underflow:
-        subtitle_bits.append(f"underflow={underflow}")
+        subtitle_parts.append(f"underflow={underflow}")
     if overflow:
-        subtitle_bits.append(f"overflow={overflow}")
+        subtitle_parts.append(f"overflow={overflow}")
 
     fig.update_layout(
         title=dict(
-            text=f"<b>Age Distribution</b><br><sub>{', '.join(subtitle_bits)}</sub>",
+            text=f"<b>Age Distribution</b><br><sub>{', '.join(subtitle_parts)}</sub>",
             x=0.5,
             xanchor="center",
             font=dict(size=20, color="#e9eefc"),
@@ -226,18 +199,16 @@ def build_figure(data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         margin=dict(t=110, l=60, r=40, b=80),
         showlegend=False,
         xaxis=dict(
-            title="Age Range",
+            title=dict(text="Age Range", font=dict(color="#c8d6f0")),
             tickangle=-45,
             tickfont=dict(color="#c8d6f0"),
-            titlefont=dict(color="#c8d6f0"),
-            gridcolor="rgba(200,200,200,0.15)",
+            gridcolor="rgba(200, 200, 200, 0.15)",
         ),
         yaxis=dict(
-            title="Count",
+            title=dict(text="Count", font=dict(color="#c8d6f0")),
             tickfont=dict(color="#c8d6f0"),
-            titlefont=dict(color="#c8d6f0"),
-            gridcolor="rgba(200,200,200,0.15)",
-            zerolinecolor="rgba(200,200,200,0.2)",
+            gridcolor="rgba(200, 200, 200, 0.15)",
+            zerolinecolor="rgba(200, 200, 200, 0.2)",
         ),
     )
 
