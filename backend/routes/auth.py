@@ -5,7 +5,22 @@ from datetime import datetime, timezone
 from functools import wraps
 from flask import Blueprint, request, jsonify, session, g
 import requests as http_req
+from werkzeug.security import check_password_hash, generate_password_hash
 from models import db, User, AuditLog, SessionLog
+from extensions import limiter
+
+# Used to equalise login timing when a username/email is not found,
+# preventing enumeration via response-time differences.
+_DUMMY_HASH = generate_password_hash("__timing_dummy__")
+
+# Magic byte signatures for allowed image types
+_MAGIC_BYTES = {
+    "jpg":  b"\xff\xd8\xff",
+    "jpeg": b"\xff\xd8\xff",
+    "png":  b"\x89PNG",
+    "gif":  b"GIF8",
+    "webp": b"RIFF",
+}
 
 logger = logging.getLogger(__name__)
 security_logger = logging.getLogger("security")
@@ -99,6 +114,7 @@ def admin_required(f):
 # ROUTES
 # =============================================================================
 @auth_bp.route("/register", methods=["POST"])
+@limiter.limit("5 per minute")
 def register():
     """
     Register a new user.
@@ -163,6 +179,7 @@ def register():
 
 
 @auth_bp.route("/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login():
     """
     Authenticate user and create session.
@@ -193,6 +210,9 @@ def login():
         user = User.query.filter_by(email=email).first()
 
     if not user:
+        # Run a dummy hash check to equalise response time with a real wrong-password
+        # attempt — prevents username enumeration via timing differences.
+        check_password_hash(_DUMMY_HASH, password)
         security_logger.warning("Login failed: user not found identifier='%s' ip=%s", identifier, _get_ip())
         _audit(AuditLog.LOGIN_FAILED, detail=f"User not found: {identifier}")
         return jsonify({"error": "Invalid credentials"}), 401
@@ -475,6 +495,11 @@ def upload_avatar():
     data = f.read()
     if len(data) > MAX_AVATAR_BYTES:
         return jsonify({"error": "File too large (max 2MB)"}), 400
+
+    # Validate magic bytes — reject files that lie about their extension
+    expected_magic = _MAGIC_BYTES.get(ext, b"")
+    if not data[:len(expected_magic)] == expected_magic:
+        return jsonify({"error": "File content does not match declared type"}), 400
 
     supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")

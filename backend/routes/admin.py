@@ -37,6 +37,28 @@ def admin_roseplot():
         logger.error("Failed to generate admin roseplot", exc_info=True)
         return jsonify({"error": "Failed to generate admin visualization"}), 500
 
+@admin_bp.route("/divergingstackedbarchart", methods=["GET"])
+@admin_required
+def admin_divergingstackedbarchart():
+    """
+    GET /api/admin/divergingstackedbarchart?user_id=all|<id>&goals=1,2,3&weeks=2,3,4,5,6
+    Returns the Plotly figure dict. Aggregates all users by default.
+    """
+    try:
+        chart_mod = importlib.import_module("analysis.admin_divergingstackedbarchart")
+
+        data = chart_mod.fetch_data(
+            engine=db.engine,
+            user_id=request.args.get("user_id", "all"),
+            goals=request.args.get("goals", "1,2,3"),
+            weeks=request.args.get("weeks", "2,3,4,5,6"),
+        )
+        fig_dict = chart_mod.build_figure(data)
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate admin diverging stacked bar chart", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500
+
 
 # =============================================================================
 # GET /api/admin/stats — Dashboard overview cards

@@ -1,43 +1,129 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 import RosePlot from "../graphs/RosePlot.jsx";
+import LoadingScreen from "./LoadingScreen.jsx";
 
 export default function OverviewPage({ user, onLogout }) {
-  const [goal, setGoal] = useState("2");
-  const [weeks, setWeeks] = useState("2-6");
+  const [goalFilter, setGoalFilter] = useState("all");
+  const [weekFilter, setWeekFilter] = useState("2-6");
 
-  const subtitle = useMemo(() => `Filters: Goal ${goal}, Weeks ${weeks}`, [goal, weeks]);
+  const [goals, setGoals] = useState([]);
+  const [roseFigure, setRoseFigure] = useState(null);
+  const [filteredRoseFigure, setFilteredRoseFigure] = useState(null);
+  const [ready, setReady] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState("Loading overview...");
+
+  useEffect(() => {
+    Promise.allSettled([
+      fetch("/api/visualizations/goals", { credentials: "include" }).then((r) =>
+        r.ok ? r.json() : Promise.reject(r)
+      ),
+      fetch("/api/visualizations/roseplot", { credentials: "include" }).then((r) =>
+        r.ok ? r.json() : Promise.reject(r)
+      ),
+    ]).then(([goalsResult, roseResult]) => {
+      const fetchedGoals =
+        goalsResult.status === "fulfilled" ? goalsResult.value.goals || [] : [];
+      const rose =
+        roseResult.status === "fulfilled" ? roseResult.value : null;
+
+      setGoals(fetchedGoals);
+      setRoseFigure(rose);
+      setFilteredRoseFigure(rose);
+      setReady(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+
+    const params = new URLSearchParams();
+    if (goalFilter !== "all") params.set("goal_id", goalFilter);
+    if (weekFilter !== "all") params.set("weeks", weekFilter);
+
+    setLoadingStatus("Updating overview...");
+
+    fetch(`/api/visualizations/roseplot?${params.toString()}`, {
+      credentials: "include",
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((fig) => setFilteredRoseFigure(fig))
+      .catch(() => {});
+  }, [goalFilter, weekFilter, ready]);
+
+  const subtitle = useMemo(() => {
+    const selectedGoal =
+      goalFilter === "all"
+        ? "All Goals"
+        : goals.find((g) => String(g.goal_id) === String(goalFilter))?.text ||
+          `Goal ${goalFilter}`;
+
+    const selectedWeeks =
+      weekFilter === "all"
+        ? "All Weeks"
+        : weekFilter === "2-6"
+        ? "Weeks 2–6"
+        : weekFilter === "3-6"
+        ? "Weeks 3–6"
+        : weekFilter === "4-6"
+        ? "Weeks 4–6"
+        : weekFilter === "5-6"
+        ? "Weeks 5–6"
+        : `Weeks ${weekFilter}`;
+
+    return `Filters: ${selectedGoal}, ${selectedWeeks}`;
+  }, [goalFilter, weekFilter, goals]);
+
+  if (!ready) return <LoadingScreen status={loadingStatus} />;
 
   return (
-    <HomeLayout user={user} onLogout={onLogout} title="Overview" rightSlot={<span style={pill}>{subtitle}</span>}>
+    <HomeLayout
+      user={user}
+      onLogout={onLogout}
+      title="Overview"
+      rightSlot={<span style={pill}>{subtitle}</span>}
+    >
       <div style={card}>
         <div style={row}>
           <label style={label}>
             Goal
-            <select value={goal} onChange={(e) => setGoal(e.target.value)} style={select}>
-              <option value="1">Goal 1</option>
-              <option value="2">Goal 2</option>
-              <option value="3">Goal 3</option>
+            <select
+              value={goalFilter}
+              onChange={(e) => setGoalFilter(e.target.value)}
+              style={select}
+            >
+              <option value="all">All Goals</option>
+              {goals.map((g) => (
+                <option key={g.goal_id} value={String(g.goal_id)}>
+                  {g.text.length > 24 ? g.text.slice(0, 24) + "…" : g.text}
+                </option>
+              ))}
             </select>
           </label>
 
           <label style={label}>
             Weeks
-            <select value={weeks} onChange={(e) => setWeeks(e.target.value)} style={select}>
-              <option value="1-6">Weeks 1–6</option>
+            <select
+              value={weekFilter}
+              onChange={(e) => setWeekFilter(e.target.value)}
+              style={select}
+            >
+              <option value="all">All Weeks</option>
               <option value="2-6">Weeks 2–6</option>
               <option value="3-6">Weeks 3–6</option>
-              <option value="3-6">Weeks 4–6</option>
-              <option value="3-6">Weeks 5–6</option>
+              <option value="4-6">Weeks 4–6</option>
+              <option value="5-6">Weeks 5–6</option>
             </select>
           </label>
 
-          <Link to="/dashboard" style={pillBtn}>Back to Dashboard</Link>
+          <Link to="/dashboard" style={pillBtn}>
+            Back to Dashboard
+          </Link>
         </div>
 
         <div style={plotWrap}>
-          <RosePlot />
+          <RosePlot figure={filteredRoseFigure || roseFigure} />
         </div>
       </div>
     </HomeLayout>
@@ -52,8 +138,23 @@ const card = {
   boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
   backdropFilter: "blur(8px)",
 };
-const row = { display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 };
-const label = { display: "grid", gap: 6, fontWeight: 800, fontSize: 13, opacity: 0.92 };
+
+const row = {
+  display: "flex",
+  gap: 12,
+  alignItems: "center",
+  flexWrap: "wrap",
+  marginBottom: 14,
+};
+
+const label = {
+  display: "grid",
+  gap: 6,
+  fontWeight: 800,
+  fontSize: 13,
+  opacity: 0.92,
+};
+
 const select = {
   padding: "10px 12px",
   borderRadius: 12,
@@ -62,6 +163,7 @@ const select = {
   color: "var(--ghost-color)",
   outline: "none",
 };
+
 const pillBtn = {
   padding: "10px 12px",
   borderRadius: 12,
@@ -71,6 +173,7 @@ const pillBtn = {
   fontWeight: 900,
   textDecoration: "none",
 };
+
 const pill = {
   padding: "6px 10px",
   borderRadius: 999,
@@ -79,6 +182,7 @@ const pill = {
   background: "var(--ghost-bg)",
   color: "var(--ghost-color)",
 };
+
 const plotWrap = {
   borderRadius: 12,
   border: "1px solid var(--subtle-border)",

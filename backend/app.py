@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 
 from models import db
 from logging_config import setup_logging
+from extensions import limiter
 
 load_dotenv()
 
@@ -60,6 +61,7 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = _engine_options
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 db.init_app(app)
+limiter.init_app(app)
 
 # Register blueprints
 from routes.auth import auth_bp
@@ -144,7 +146,7 @@ def set_security_headers(response):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self' data:; "
@@ -201,20 +203,13 @@ def unhandled_exception(error):
 # =============================================================================
 @app.route("/")
 def health_check():
-    """Basic health check — extended with DB status and uptime."""
-    health = {
-        "status": "healthy",
-        "service": "brights-api",
-    }
-    # Check database connectivity
+    """Basic health check. DB connectivity checked internally but not exposed."""
     try:
         db.session.execute(db.text("SELECT 1"))
-        health["database"] = "connected"
     except Exception as e:
-        health["status"] = "degraded"
-        health["database"] = "disconnected"
         logger.error("Health check: database unreachable — %s", str(e))
-    return health
+        return {"status": "degraded"}, 503
+    return {"status": "ok"}
 
 
 # =============================================================================
