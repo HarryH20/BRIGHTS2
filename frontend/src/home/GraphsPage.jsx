@@ -1,7 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
-import AgePlot from "../graphs/AgePlot.jsx";
 
 export default function GraphsPage({ user, onLogout }) {
   return (
@@ -14,11 +13,9 @@ export default function GraphsPage({ user, onLogout }) {
           </Link>
         </div>
 
-        <p style={styles.muted}>Age distribution graph is shown below.</p>
-
-        <div style={styles.graphWrapper}>
-          <AgePlot />
-        </div>
+        <p style={styles.muted}>
+          Graphs are available on the dashboard. Admin-only graphs are not shown here.
+        </p>
       </div>
     </HomeLayout>
   );
@@ -46,14 +43,6 @@ const styles = {
     opacity: 0.7,
     fontSize: 14,
     marginBottom: 20,
-  },
-  graphWrapper: {
-    width: "100%",
-    minHeight: 450,
-    borderRadius: 14,
-    padding: 16,
-    border: "1px solid var(--card-border)",
-    background: "rgba(255,255,255,0.02)",
   },
   backBtn: {
     padding: "10px 14px",

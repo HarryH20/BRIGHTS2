@@ -264,3 +264,21 @@ def stats_activity():
     activity = sorted(daily.values(), key=lambda d: d["date"])
 
     return jsonify({"days": days, "activity": activity}), 200
+
+
+@admin_bp.route("/ageplot", methods=["GET"])
+@admin_required
+def admin_ageplot():
+    """
+    GET /api/admin/ageplot
+    Returns the Plotly figure dict for the admin-only age distribution chart.
+    """
+    try:
+        age_mod = importlib.import_module("analysis.ageplot")
+
+        data = age_mod.fetch_data(db.engine, **request.args)
+        fig_dict = age_mod.build_figure(data)
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate admin ageplot", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500
