@@ -89,7 +89,7 @@ def get_goals():
     return jsonify({"goals": goals_out})
 
 
-_ALLOWED_GRAPHS = {"roseplot", "radarplot", "ageplot", "solodivergingstackedbarchart"}
+_ALLOWED_GRAPHS = {"roseplot", "radarplot", "ageplot", "solodivergingstackedbarchart", "adminalluvial", "linguisticmarkersplot", "linguisticmarkerswordcloud"}
 
 
 @viz_bp.route("/<graph_name>")
@@ -111,8 +111,11 @@ def serve_graph(graph_name):
 
     start = time.time()
     try:
-        data = module.fetch_data(session["user_id"], db.engine, **request.args)
-        fig_dict = module.build_figure(data)
+        if graph_name in {"adminalluvial", "linguisticmarkersplot", "linguisticmarkerswordcloud"}:
+            fig_dict = module.build_figure(db.engine)
+        else:
+            data = module.fetch_data(session["user_id"], db.engine, **request.args)
+            fig_dict = module.build_figure(data)
 
         duration_ms = (time.time() - start) * 1000
         logger.info("Graph '%s' generated in %.1fms", graph_name, duration_ms)
