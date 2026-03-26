@@ -3,40 +3,62 @@ import React, { useEffect, useState } from "react";
 import Plot from "react-plotly.js";
 
 export default function AgePlot({
-  // Optional filters / params (match your backend fetch_data kwargs)
   participantId = null,
   goalId = null,
   binSize = 5,
   minAge = 0,
   maxAge = 100,
-
-  // Optional: if parent already fetched the figure, pass it in
   figure: prefetchedFigure,
 }) {
   const [figure, setFigure] = useState(prefetchedFigure ?? null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // If parent prefetched the data, skip the self-fetch
-    if (prefetchedFigure !== undefined) return;
+    if (prefetchedFigure !== undefined) {
+      setFigure(prefetchedFigure);
+      return;
+    }
 
-    const params = new URLSearchParams();
-    params.set("bin_size", String(binSize));
-    params.set("min_age", String(minAge));
-    params.set("max_age", String(maxAge));
-    if (participantId) params.set("participant_id", participantId);
-    if (goalId) params.set("goal_id", goalId);
+    let cancelled = false;
 
-    fetch(`/api/visualizations/ageplot?${params.toString()}`, {
-      credentials: "include",
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        return res.json();
-      })
-      .then((fig) => setFigure(fig))
-      .catch((err) => setError(err.message));
-  }, [participantId, goalId, binSize, minAge, maxAge]); // eslint-disable-line
+    async function loadFigure() {
+      try {
+        setError(null);
+
+        const params = new URLSearchParams();
+        params.set("bin_size", String(binSize));
+        params.set("min_age", String(minAge));
+        params.set("max_age", String(maxAge));
+
+        if (participantId) params.set("participant_id", participantId);
+        if (goalId) params.set("goal_id", goalId);
+
+        const res = await fetch(`/api/admin/ageplot?${params.toString()}`, {
+          credentials: "include",
+        });
+
+        const fig = await res.json();
+
+        if (!res.ok) {
+          throw new Error(fig.error || `Server error: ${res.status}`);
+        }
+
+        if (!cancelled) {
+          setFigure(fig);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Failed to load age distribution");
+        }
+      }
+    }
+
+    loadFigure();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [participantId, goalId, binSize, minAge, maxAge, prefetchedFigure]);
 
   if (error) {
     return (
@@ -67,7 +89,7 @@ export default function AgePlot({
 
   return (
     <Plot
-      data={figure.data}
+      data={figure.data || []}
       layout={layout}
       config={{
         responsive: true,

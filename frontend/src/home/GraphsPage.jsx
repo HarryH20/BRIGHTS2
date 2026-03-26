@@ -1,69 +1,69 @@
-import React from "react";
-import { Link } from "react-router-dom";
-import HomeLayout from "./HomeLayout.jsx";
-import AgePlot from "../graphs/AgePlot.jsx";
+import React, { useEffect, useState } from "react";
+import Plot from "react-plotly.js";
 
-export default function GraphsPage({ user, onLogout }) {
+export default function AgePlot() {
+  const [figure, setFigure] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFigure() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await fetch("/api/admin/ageplot", {
+          credentials: "include",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load age plot");
+        }
+
+        if (!cancelled) {
+          setFigure(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Failed to load age plot");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadFigure();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return <div>Loading age plot...</div>;
+  }
+
+  if (error) {
+    return <div style={{ color: "red" }}>{error}</div>;
+  }
+
+  if (!figure) {
+    return <div>No age plot data available.</div>;
+  }
+
   return (
-    <HomeLayout user={user} onLogout={onLogout} title="Survey Graphs">
-      <div style={styles.card}>
-        <div style={styles.header}>
-          <h2 style={styles.h2}>Survey Graphs</h2>
-          <Link to="/dashboard" style={styles.backBtn}>
-            ← Back to Dashboard
-          </Link>
-        </div>
-
-        <p style={styles.muted}>Age distribution graph is shown below.</p>
-
-        <div style={styles.graphWrapper}>
-          <AgePlot />
-        </div>
-      </div>
-    </HomeLayout>
+    <Plot
+      data={figure.data || []}
+      layout={figure.layout || {}}
+      config={figure.config || { responsive: true }}
+      style={{ width: "100%", height: "100%" }}
+      useResizeHandler
+    />
   );
 }
-
-const styles = {
-  card: {
-    padding: 22,
-    borderRadius: 16,
-    border: "1px solid var(--card-border)",
-    background: "var(--card-bg)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
-  },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  h2: {
-    margin: 0,
-    fontSize: 20,
-  },
-  muted: {
-    opacity: 0.7,
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  graphWrapper: {
-    width: "100%",
-    minHeight: 450,
-    borderRadius: 14,
-    padding: 16,
-    border: "1px solid var(--card-border)",
-    background: "rgba(255,255,255,0.02)",
-  },
-  backBtn: {
-    padding: "10px 14px",
-    borderRadius: 12,
-    border: "1px solid var(--ghost-border)",
-    background: "var(--ghost-bg)",
-    color: "var(--ghost-color)",
-    fontWeight: 800,
-    textDecoration: "none",
-    display: "inline-flex",
-    alignItems: "center",
-  },
-};

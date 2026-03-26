@@ -51,17 +51,7 @@ def _build_bins(min_age: int, max_age: int, bin_size: int) -> Tuple[List[str], L
     return labels, bins
 
 
-def fetch_data(user_id, engine, goal_id=None, **kwargs) -> Dict[str, Any]:
-    """
-    Matches your existing graph system:
-        fetch_data(user_id, engine, **kwargs)
-
-    This version uses the working SQL logic you tested:
-    - removes NULL ages
-    - removes blank/whitespace-only ages
-    - keeps only numeric-looking age values
-    """
-
+def fetch_data(engine, goal_id=None, **kwargs):
     bin_size = int(kwargs.get("bin_size", 5))
     min_age = int(kwargs.get("min_age", 0))
     max_age = int(kwargs.get("max_age", 100))
@@ -85,7 +75,7 @@ def fetch_data(user_id, engine, goal_id=None, **kwargs) -> Dict[str, Any]:
         'TRIM("Age") <> \'\'',
         r'''TRIM("Age") ~ '^[0-9]+(\.[0-9]+)?$' ''',
     ]
-    params: Dict[str, Any] = {}
+    params = {}
 
     if goal_id is not None and str(goal_id).strip() != "":
         where_clauses.append('"GoalID" = :gid')
@@ -142,7 +132,6 @@ def fetch_data(user_id, engine, goal_id=None, **kwargs) -> Dict[str, Any]:
         "underflow": underflow,
         "overflow": overflow,
         "filters": {
-            "user_id": str(user_id) if user_id is not None else None,
             "goal_id": str(goal_id) if goal_id is not None else None,
         },
     }
