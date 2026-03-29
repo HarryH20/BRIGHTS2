@@ -2,26 +2,64 @@ import React, { useEffect, useState } from "react";
 import Plot from "react-plotly.js";
 
 export default function LinguisticMarkersPlot({
-  // Optional: if parent already fetched the figure, pass it in
   figure: prefetchedFigure,
 }) {
   const [figure, setFigure] = useState(prefetchedFigure ?? null);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(prefetchedFigure === undefined);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    // If parent prefetched the data, skip the self-fetch
-    if (prefetchedFigure !== undefined) return;
+    if (prefetchedFigure !== undefined) {
+      setFigure(prefetchedFigure);
+      setLoading(false);
+      return;
+    }
 
-    fetch("/api/visualizations/linguisticmarkersplot", {
-      credentials: "include",
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        return res.json();
-      })
-      .then((fig) => setFigure(fig))
-      .catch((err) => setError(err.message));
+    let cancelled = false;
+
+    async function loadFigure() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await fetch("/api/admin/linguisticmarkersplot", {
+          credentials: "include",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load linguistic markers plot");
+        }
+
+        if (!cancelled) {
+          setFigure(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Failed to load linguistic markers plot");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadFigure();
+
+    return () => {
+      cancelled = true;
+    };
   }, [prefetchedFigure]);
+
+  if (loading) {
+    return (
+      <div style={styles.fallback}>
+        <p style={styles.loadingText}>Loading linguistic markers plot...</p>
+      </div>
+    );
+  }
 
   if (error) {
     return (
@@ -36,8 +74,7 @@ export default function LinguisticMarkersPlot({
   if (!figure) {
     return (
       <div style={styles.fallback}>
-        <div style={styles.spinner} />
-        <p style={styles.loadingText}>Loading linguistic markers plot...</p>
+        <p style={styles.loadingText}>No linguistic markers plot data available.</p>
       </div>
     );
   }
@@ -54,7 +91,7 @@ export default function LinguisticMarkersPlot({
 
   return (
     <Plot
-      data={figure.data}
+      data={figure.data || []}
       layout={layout}
       config={{
         responsive: true,
@@ -76,14 +113,6 @@ const styles = {
     justifyContent: "center",
     minHeight: 220,
     gap: 12,
-  },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: "3px solid rgba(79,124,255,0.2)",
-    borderTop: "3px solid #4f7cff",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
   },
   loadingText: {
     color: "#c8d6f0",

@@ -145,7 +145,7 @@ def _t(week):
 def fetch_data(engine):
     """
     Fetches Likert columns GT{t}Q{q} for all valid (t, q) combinations.
-    Q1–Q22: T1–T6.  Q23–Q43: T2–T6.
+    Q1–Q22: T1–T6. Q23–Q43: T2–T6.
 
     Returns a list of dicts keyed by 'GT{t}Q{q}'.
     """
@@ -158,7 +158,7 @@ def fetch_data(engine):
             cols.append(f"GT{t}Q{q}")
 
     col_str = ", ".join(f'"{c}"' for c in cols)
-    query = sqlalchemy.text(f'SELECT {col_str} FROM "BRIGHTS"')
+    query = sqlalchemy.text(f'SELECT {col_str} FROM "GoalIntervention"')
 
     with engine.connect() as conn:
         result = conn.execute(query)

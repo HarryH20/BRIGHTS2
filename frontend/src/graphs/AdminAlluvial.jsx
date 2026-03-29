@@ -1,28 +1,55 @@
-// frontend/src/graphs/AdminAlluvial.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import Plot from "react-plotly.js";
 
-export default function AdminAlluvial({
-  // Optional: if parent already fetched the payload, pass it in
-  figure: prefetchedFigure,
-}) {
+export default function AdminAlluvial({ figure: prefetchedFigure }) {
   const [figure, setFigure] = useState(prefetchedFigure ?? null);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(prefetchedFigure === undefined);
+  const [error, setError] = useState("");
   const [selectedTransition, setSelectedTransition] = useState("");
 
   useEffect(() => {
-    // If parent prefetched the data, skip the self-fetch
-    if (prefetchedFigure !== undefined) return;
+    if (prefetchedFigure !== undefined) {
+      setFigure(prefetchedFigure);
+      setLoading(false);
+      return;
+    }
 
-    fetch("/api/visualizations/adminalluvial", {
-      credentials: "include",
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        return res.json();
-      })
-      .then((fig) => setFigure(fig))
-      .catch((err) => setError(err.message));
+    let cancelled = false;
+
+    async function loadFigure() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await fetch("/api/admin/alluvial", {
+          credentials: "include",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load admin alluvial charts");
+        }
+
+        if (!cancelled) {
+          setFigure(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Failed to load admin alluvial charts");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadFigure();
+
+    return () => {
+      cancelled = true;
+    };
   }, [prefetchedFigure]);
 
   const transitions = figure?.transitions ?? [];
@@ -35,53 +62,51 @@ export default function AdminAlluvial({
   }, [transitions, selectedTransition]);
 
   const currentFigures = useMemo(() => {
-    if (!selectedTransition) return [];
+    if (!selectedTransition) {
+      return [];
+    }
     return figuresByTransition[selectedTransition] ?? [];
   }, [figuresByTransition, selectedTransition]);
 
+  if (loading) {
+    return <div style={styles.stateBox}>Loading admin alluvial charts...</div>;
+  }
+
   if (error) {
-    return (
-      <div style={styles.fallback}>
-        <p style={styles.errorText}>Could not load admin alluvial charts: {error}</p>
-      </div>
-    );
+    return <div style={styles.errorBox}>{error}</div>;
   }
 
-  if (!figure) {
-    return (
-      <div style={styles.fallback}>
-        <div style={styles.spinner} />
-        <p style={styles.loadingText}>Loading admin alluvial charts...</p>
-      </div>
-    );
-  }
-
-  if (!transitions.length) {
-    return (
-      <div style={styles.fallback}>
-        <p style={styles.loadingText}>No alluvial chart data available.</p>
-      </div>
-    );
+  if (!figure || !transitions.length) {
+    return <div style={styles.stateBox}>No admin alluvial chart data available.</div>;
   }
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.toolbar}>
-        <label htmlFor="transition-select" style={styles.label}>
-          Transition
-        </label>
-        <select
-          id="transition-select"
-          value={selectedTransition}
-          onChange={(e) => setSelectedTransition(e.target.value)}
-          style={styles.select}
-        >
-          {transitions.map((transition) => (
-            <option key={transition.key} value={transition.key}>
-              {transition.label}
-            </option>
-          ))}
-        </select>
+      <div style={styles.header}>
+        <div>
+          <h2 style={styles.title}>Alluvial Chart</h2>
+          <p style={styles.subtitle}>
+            Compare response flow across transitions.
+          </p>
+        </div>
+
+        <div style={styles.toolbar}>
+          <label htmlFor="transition-select" style={styles.label}>
+            Transition
+          </label>
+          <select
+            id="transition-select"
+            value={selectedTransition}
+            onChange={(e) => setSelectedTransition(e.target.value)}
+            style={styles.select}
+          >
+            {transitions.map((transition) => (
+              <option key={transition.key} value={transition.key}>
+                {transition.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div style={styles.metaRow}>
@@ -99,6 +124,17 @@ export default function AdminAlluvial({
             height: item.figure?.layout?.height ?? 650,
             paper_bgcolor: "rgba(0,0,0,0)",
             plot_bgcolor: "rgba(0,0,0,0)",
+            font: {
+              ...(item.figure?.layout?.font || {}),
+              color: "#c8d6f0",
+            },
+            title: {
+              ...(item.figure?.layout?.title || {}),
+              font: {
+                ...((item.figure?.layout?.title && item.figure.layout.title.font) || {}),
+                color: "#e9eefc",
+              },
+            },
           };
 
           return (
@@ -111,7 +147,7 @@ export default function AdminAlluvial({
               </div>
 
               <Plot
-                data={item.figure.data}
+                data={item.figure?.data || []}
                 layout={chartLayout}
                 config={{
                   responsive: true,
@@ -119,7 +155,7 @@ export default function AdminAlluvial({
                   displaylogo: false,
                   modeBarButtonsToRemove: ["lasso2d", "select2d"],
                 }}
-                style={{ width: "100%" }}
+                style={{ width: "100%", minHeight: "650px" }}
                 useResizeHandler
               />
             </div>
@@ -134,8 +170,31 @@ const styles = {
   wrapper: {
     display: "flex",
     flexDirection: "column",
-    gap: 18,
+    gap: 20,
     width: "100%",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: 16,
+    flexWrap: "wrap",
+    padding: "18px 20px",
+    borderRadius: 18,
+    border: "1px solid var(--card-border)",
+    background: "rgba(255,255,255,0.02)",
+  },
+  title: {
+    margin: 0,
+    color: "#e9eefc",
+    fontSize: 24,
+    fontWeight: 700,
+  },
+  subtitle: {
+    margin: "6px 0 0 0",
+    color: "#c8d6f0",
+    fontSize: 14,
+    opacity: 0.85,
   },
   toolbar: {
     display: "flex",
@@ -175,14 +234,15 @@ const styles = {
     gap: 20,
   },
   card: {
-    padding: 16,
-    borderRadius: 16,
+    padding: 18,
+    borderRadius: 18,
     border: "1px solid var(--card-border)",
     background: "rgba(255,255,255,0.02)",
     overflowX: "auto",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
   },
   cardHeader: {
-    marginBottom: 10,
+    marginBottom: 12,
   },
   cardTitle: {
     margin: 0,
@@ -196,29 +256,20 @@ const styles = {
     fontSize: 13,
     opacity: 0.8,
   },
-  fallback: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 220,
-    gap: 12,
-  },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: "3px solid rgba(79,124,255,0.2)",
-    borderTop: "3px solid #4f7cff",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-  loadingText: {
+  stateBox: {
+    padding: 20,
+    borderRadius: 16,
+    border: "1px solid var(--card-border)",
+    background: "rgba(255,255,255,0.02)",
     color: "#c8d6f0",
     fontSize: 14,
-    opacity: 0.8,
   },
-  errorText: {
-    color: "#ff8a8a",
+  errorBox: {
+    padding: 20,
+    borderRadius: 16,
+    border: "1px solid rgba(255,120,120,0.35)",
+    background: "rgba(255,120,120,0.08)",
+    color: "#ff9b9b",
     fontSize: 14,
     fontWeight: 600,
   },

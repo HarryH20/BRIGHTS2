@@ -54,7 +54,7 @@ def fetch_data(engine):
     all_cols      = reflect_cols + progress_cols
 
     query = sqlalchemy.text(
-        f'SELECT {", ".join(all_cols)} FROM "BRIGHTS"'
+        f'SELECT {", ".join(all_cols)} FROM "GoalIntervention"'
     )
 
     with engine.connect() as conn:

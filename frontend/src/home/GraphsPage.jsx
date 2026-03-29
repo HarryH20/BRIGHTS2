@@ -1,69 +1,47 @@
-import React, { useEffect, useState } from "react";
-import Plot from "react-plotly.js";
+import React from "react";
+import LinguisticMarkersPlot from "../graphs/LinguisticMarkersPlot";
+import AgePlot from "../graphs/AgePlot";
+import AdminAlluvial from "../graphs/AdminAlluvial";
 
-export default function AgePlot() {
-  const [figure, setFigure] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadFigure() {
-      try {
-        setLoading(true);
-        setError("");
-
-        const response = await fetch("/api/admin/ageplot", {
-          credentials: "include",
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to load age plot");
-        }
-
-        if (!cancelled) {
-          setFigure(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message || "Failed to load age plot");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadFigure();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading) {
-    return <div>Loading age plot...</div>;
-  }
-
-  if (error) {
-    return <div style={{ color: "red" }}>{error}</div>;
-  }
-
-  if (!figure) {
-    return <div>No age plot data available.</div>;
-  }
-
+export default function GraphsPage() {
   return (
-    <Plot
-      data={figure.data || []}
-      layout={figure.layout || {}}
-      config={figure.config || { responsive: true }}
-      style={{ width: "100%", height: "100%" }}
-      useResizeHandler
-    />
+    <div style={styles.wrapper}>
+
+      <div style={styles.section}>
+        <h2 style={styles.title}>Linguistic Markers</h2>
+        <LinguisticMarkersPlot />
+      </div>
+
+      <div style={styles.section}>
+        <h2 style={styles.title}>Age Distribution</h2>
+        <AgePlot />
+      </div>
+
+      <div style={styles.section}>
+        <h2 style={styles.title}>Alluvial Chart</h2>
+        <AdminAlluvial />
+      </div>
+
+    </div>
   );
 }
+
+const styles = {
+  wrapper: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 32,
+    width: "100%",
+  },
+  section: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  title: {
+    color: "#e9eefc",
+    fontSize: 22,
+    fontWeight: 700,
+    margin: 0,
+  },
+};

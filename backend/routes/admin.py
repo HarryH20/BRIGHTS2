@@ -282,3 +282,37 @@ def admin_ageplot():
     except Exception:
         logger.error("Failed to generate admin ageplot", exc_info=True)
         return jsonify({"error": "Failed to generate admin visualization"}), 500
+
+
+@admin_bp.route("/alluvial", methods=["GET"])
+@admin_required
+def admin_alluvial():
+    """
+    GET /api/admin/alluvial
+    Returns the Plotly/Sankey payload for the admin-only alluvial chart.
+    """
+    try:
+        alluvial_mod = importlib.import_module("analysis.adminalluvial")
+
+        fig_dict = alluvial_mod.build_figure(db.engine)
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate admin alluvial chart", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500
+
+
+@admin_bp.route("/linguisticmarkersplot", methods=["GET"])
+@admin_required
+def admin_linguisticmarkersplot():
+    """
+    GET /api/admin/linguisticmarkersplot
+    Returns the Plotly figure dict for the admin-only linguistic markers plot.
+    """
+    try:
+        linguistic_mod = importlib.import_module("analysis.linguisticmarkersplot")
+
+        fig_dict = linguistic_mod.build_figure(db.engine)
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate admin linguistic markers plot", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500
