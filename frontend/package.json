@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 3000",
+    "dev": "vite --host localhost --port 3000",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -17,6 +17,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.0.12"
+    "vite": "^6.2.0"
   }
 }
