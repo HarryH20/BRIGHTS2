@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func
+import sqlalchemy
 
 from models import AuditLog, SessionLog, User, db
 from routes.auth import admin_required
@@ -333,6 +334,94 @@ def admin_linguisticmarkerswordcloud():
     except Exception:
         logger.error("Failed to generate admin linguistic markers word cloud", exc_info=True)
         return jsonify({"error": "Failed to generate admin visualization"}), 500
+
+# =============================================================================
+# GET /api/admin/demographics — User Profile (per-user demographics)
+# =============================================================================
+@admin_bp.route("/demographics", methods=["GET"])
+@admin_required
+def admin_userprofile():
+    try:
+        profile_mod = importlib.import_module("analysis.admin_userprofile")
+
+        user_id_raw = request.args.get("user_id", "all")
+
+        with db.engine.connect() as conn:
+            all_rows_raw = conn.execute(sqlalchemy.text("""
+                SELECT
+                    "Condition",
+                    "Age",
+                    "Gender_1","Gender_2","Gender_3","Gender_4",
+                    "Gender_5","Gender_6","Gender_7","Gender_8","Gender_9",
+                    "Race","Race_9_TEXT",
+                    "Religion","Religion_10_TEXT",
+                    "Religiosity",
+                    "SES",
+                    "Income",
+                    "Edu",
+                    "Work",
+                    "Pol",
+                    "PolAff",
+                    "PolAff_4_TEXT",
+                    "Marital"
+                FROM "GoalIntervention"
+            """)).fetchall()
+
+        all_rows = [dict(r._mapping) for r in all_rows_raw]
+
+        # All users
+        if user_id_raw == "all":
+            fig = profile_mod.build_figure(all_rows, None, None)
+            return jsonify(fig), 200
+
+        # Specific user
+        user_id = int(user_id_raw)
+
+        with db.engine.connect() as conn:
+            participant = conn.execute(sqlalchemy.text("""
+                SELECT participant_id
+                FROM users
+                WHERE id = :uid
+            """), {"uid": user_id}).fetchone()
+
+        if not participant:
+            return jsonify({"error": "No participant linked to this user"}), 404
+
+        participant_id = participant.participant_id
+
+        with db.engine.connect() as conn:
+            demo_row_raw = conn.execute(sqlalchemy.text("""
+                SELECT
+                    "Condition",
+                    "Age",
+                    "Gender_1","Gender_2","Gender_3","Gender_4",
+                    "Gender_5","Gender_6","Gender_7","Gender_8","Gender_9",
+                    "Race","Race_9_TEXT",
+                    "Religion","Religion_10_TEXT",
+                    "Religiosity",
+                    "SES",
+                    "Income",
+                    "Edu",
+                    "Work",
+                    "Pol",
+                    "PolAff",
+                    "PolAff_4_TEXT",
+                    "Marital"
+                FROM "GoalIntervention"
+                WHERE "ID" = :pid
+            """), {"pid": participant_id}).fetchone()
+
+        if not demo_row_raw:
+            return jsonify({"error": "Participant data not found"}), 404
+
+        single_row = dict(demo_row_raw._mapping)
+
+        fig = profile_mod.build_figure(all_rows, single_row, user_id)
+        return jsonify(fig), 200
+
+    except Exception as e:
+        logger.error("USER PROFILE ERROR", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 @admin_bp.route("/demographic-barchart", methods=["GET"])
 @admin_required
