@@ -212,17 +212,46 @@ def build_figure(all_rows, single_row=None, user_id=None):
     def hl(map_obj, field):
         if not single_row:
             return None
-        key = to_int(single_row.get(field))
-        return map_obj.get(key)
 
+        raw = single_row.get(field)
+        if raw is None:
+            return None
+
+        # Case 1: numeric coded value
+        key = to_int(raw)
+        if key in map_obj:
+            return map_obj[key]
+
+        # Case 2: stored as string label
+        if isinstance(raw, str) and raw in map_obj.values():
+            return raw
+        
+        return None
+    
+    def hl_required(map_obj, field):
+        return hl(map_obj, field)
+    
     def hl_other(field, map_obj, text_field):
         if not single_row:
             return None
-        key = to_int(single_row.get(field))
-        if key == max(map_obj.keys()):
+
+        raw = single_row.get(field)
+        if raw is None:
+            return None
+
+        key = to_int(raw)
+        if key is not None and key in map_obj:
+            label = map_obj[key]
+        elif isinstance(raw, str) and raw in map_obj.values():
+            label = raw
+        else:
+            return None
+
+        if label == "Other":
             txt = (single_row.get(text_field) or "").strip()
             return f"Other, {txt}" if txt else "Other"
-        return map_obj.get(key)
+
+        return label
 
     def subtitle_fmt(label):
         if single_row and label:
@@ -292,8 +321,8 @@ def build_figure(all_rows, single_row=None, user_id=None):
             "title": "Employment Status",
             "labels": list(emp.keys()),
             "values": list(emp.values()),
-            "highlight": hl(EMP_MAP, "Work"),
-            "subtitle": subtitle_fmt(hl(EMP_MAP, "Work"))
+            "highlight": hl_required(EMP_MAP, "Work"),
+            "subtitle": subtitle_fmt(hl_required(EMP_MAP, "Work"))
         },
 
         "annual_income": {
@@ -301,8 +330,8 @@ def build_figure(all_rows, single_row=None, user_id=None):
             "title": "Annual Income",
             "labels": list(inc.keys()),
             "values": list(inc.values()),
-            "highlight": hl(INCOME_MAP, "Income"),
-            "subtitle": subtitle_fmt(hl(INCOME_MAP, "Income"))
+            "highlight": hl_required(INCOME_MAP, "Income"),
+            "subtitle": subtitle_fmt(hl_required(INCOME_MAP, "Income"))
         },
 
         "socioeconomic_status": {
@@ -337,8 +366,8 @@ def build_figure(all_rows, single_row=None, user_id=None):
             "title": "Political Affiliation",
             "labels": list(pola.keys()),
             "values": list(pola.values()),
-            "highlight": hl(POLAFF_MAP, "PolAff"),
-            "subtitle": subtitle_fmt(hl(POLAFF_MAP, "PolAff"))
+            "highlight": hl_other("PolAff", POLAFF_MAP, "PolAff_4_TEXT"),
+            "subtitle": subtitle_fmt(hl_other("PolAff", POLAFF_MAP, "PolAff_4_TEXT"))
         },
 
         "political_orientation": {
