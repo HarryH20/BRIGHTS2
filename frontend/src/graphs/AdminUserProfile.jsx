@@ -386,7 +386,7 @@ export default function AdminDemographics({ prefetchedData, userId }) {
             color: "#ffffff",
           }}
         >
-          Demographics
+          Profile
         </h2>
 
         {userId === "all" ? (
