@@ -3,10 +3,28 @@ import { Link } from "react-router-dom";
 import HomeLayout from "../home/HomeLayout.jsx";
 import RosePlot from "../graphs/RosePlot.jsx";
 import AdminDivergingPlot from "../graphs/AdminDivergingPlot.jsx";
+import AgePlot from "../graphs/AgePlot.jsx";
+import LinguisticMarkersPlot from "../graphs/LinguisticMarkersPlot.jsx";
+import AdminAlluvial from "../graphs/AdminAlluvial.jsx";
+import LinguisticMarkersWordCloud from "../graphs/LinguisticMarkersWordCloud.jsx";
+import AdminDemographicBarChart from "../graphs/AdminDemographicBarChart.jsx";
+import AdminCountsDemographics from "../graphs/AdminCountsDemographics.jsx";
+import AdminAttritionFunnel from "../graphs/AdminAttritionFunnel.jsx";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TABS = ["Overview", "Goal Progress", "Stats", "Audit Log", "Sessions", "Questions"];
+const TABS = [
+  "Overview",
+  "Goal Progress",
+  "Stats",
+  "Audit Log",
+  "Sessions",
+  "Demographics",
+  "Linguistics",
+  "Alluvial",
+  "Questions",
+];
+
 const FORM_TYPES = ["t1", "t2", "t3t5", "t6"];
 const EVENT_TYPES = [
   "LOGIN_SUCCESS",
@@ -22,21 +40,22 @@ const EVENT_TYPES = [
 function parseDevice(ua) {
   if (!ua) return "—";
   const s = ua.toLowerCase();
-  // OS
+
   let os = "Unknown";
-  if (s.includes("iphone"))           os = "iPhone";
-  else if (s.includes("ipad"))        os = "iPad";
-  else if (s.includes("android"))     os = "Android";
-  else if (s.includes("windows nt"))  os = "Windows";
-  else if (s.includes("mac os x"))    os = "macOS";
-  else if (s.includes("linux"))       os = "Linux";
-  // Browser
+  if (s.includes("iphone")) os = "iPhone";
+  else if (s.includes("ipad")) os = "iPad";
+  else if (s.includes("android")) os = "Android";
+  else if (s.includes("windows nt")) os = "Windows";
+  else if (s.includes("mac os x")) os = "macOS";
+  else if (s.includes("linux")) os = "Linux";
+
   let browser = "";
-  if (s.includes("edg/"))             browser = "Edge";
+  if (s.includes("edg/")) browser = "Edge";
   else if (s.includes("opr/") || s.includes("opera")) browser = "Opera";
-  else if (s.includes("chrome/"))     browser = "Chrome";
-  else if (s.includes("firefox/"))    browser = "Firefox";
-  else if (s.includes("safari/"))     browser = "Safari";
+  else if (s.includes("chrome/")) browser = "Chrome";
+  else if (s.includes("firefox/")) browser = "Firefox";
+  else if (s.includes("safari/")) browser = "Safari";
+
   return browser ? `${os} · ${browser}` : os;
 }
 
@@ -87,13 +106,21 @@ function Pagination({ page, total, perPage, onChange }) {
   const totalPages = Math.max(1, Math.ceil(total / perPage));
   return (
     <div style={styles.pagination}>
-      <button style={styles.pageBtn} disabled={page <= 1} onClick={() => onChange(page - 1)}>
+      <button
+        style={styles.pageBtn}
+        disabled={page <= 1}
+        onClick={() => onChange(page - 1)}
+      >
         ‹ Prev
       </button>
       <span style={styles.pageInfo}>
         Page {page} of {totalPages} ({total} total)
       </span>
-      <button style={styles.pageBtn} disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
+      <button
+        style={styles.pageBtn}
+        disabled={page >= totalPages}
+        onClick={() => onChange(page + 1)}
+      >
         Next ›
       </button>
     </div>
@@ -107,7 +134,6 @@ function UserSearch({ users, value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
-  // Sync display when value resets externally
   useEffect(() => {
     if (value === "all") setQuery("");
   }, [value]);
@@ -120,11 +146,11 @@ function UserSearch({ users, value, onChange }) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Show all users when no query, filtered list when typing
   const filtered = query.trim()
-    ? users.filter((u) =>
-        u.username.toLowerCase().includes(query.toLowerCase()) ||
-        String(u.id).includes(query)
+    ? users.filter(
+        (u) =>
+          u.username.toLowerCase().includes(query.toLowerCase()) ||
+          String(u.id).includes(query)
       )
     : users;
 
@@ -161,16 +187,26 @@ function UserSearch({ users, value, onChange }) {
           onFocus={() => setOpen(true)}
         />
         {query ? (
-          <button style={styles.clearBtn} onClick={clear} title="Clear">×</button>
+          <button style={styles.clearBtn} onClick={clear} title="Clear">
+            ×
+          </button>
         ) : (
-          <span style={{ ...styles.clearBtn, cursor: "default", pointerEvents: "none", fontSize: 11, opacity: 0.4 }}>
+          <span
+            style={{
+              ...styles.clearBtn,
+              cursor: "default",
+              pointerEvents: "none",
+              fontSize: 11,
+              opacity: 0.4,
+            }}
+          >
             ▾
           </span>
         )}
       </div>
+
       {open && (
         <div style={styles.searchDropdown}>
-          {/* Always-visible "All users" option */}
           <div
             style={{
               ...styles.searchOption,
@@ -180,11 +216,17 @@ function UserSearch({ users, value, onChange }) {
             onMouseDown={selectAll}
           >
             <span style={{ fontWeight: 700 }}>All users</span>
-            <span style={{ opacity: 0.45, marginLeft: 6, fontSize: 11 }}>{users.length} total</span>
+            <span style={{ opacity: 0.45, marginLeft: 6, fontSize: 11 }}>
+              {users.length} total
+            </span>
           </div>
+
           {filtered.length === 0 && (
-            <div style={{ ...styles.searchOption, opacity: 0.45 }}>No matches</div>
+            <div style={{ ...styles.searchOption, opacity: 0.45 }}>
+              No matches
+            </div>
           )}
+
           {filtered.map((u) => (
             <div
               key={u.id}
@@ -205,6 +247,20 @@ function UserSearch({ users, value, onChange }) {
   );
 }
 
+// ─── Reusable chart section ───────────────────────────────────────────────────
+
+function AdminChartSection({ title, subtitle, children }) {
+  return (
+    <div style={styles.sectionBlock}>
+      <div style={styles.sectionHeader}>
+        <h3 style={styles.sectionTitle}>{title}</h3>
+        {subtitle ? <p style={styles.sectionSubtitle}>{subtitle}</p> : null}
+      </div>
+      <div style={styles.plotWrap}>{children}</div>
+    </div>
+  );
+}
+
 // ─── Tab: Overview ────────────────────────────────────────────────────────────
 
 function OverviewTab({ users }) {
@@ -219,16 +275,27 @@ function OverviewTab({ users }) {
     setError(null);
     setFigure(null);
 
-    const qs = new URLSearchParams({ user_id: userId, goal_id: goal, weeks }).toString();
+    const qs = new URLSearchParams({
+      user_id: userId,
+      goal_id: goal,
+      weeks,
+    }).toString();
+
     fetch(`/api/admin/roseplot?${qs}`, { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(`Roseplot fetch failed: ${r.status}`);
         return r.json();
       })
-      .then((fig) => { if (!cancelled) setFigure(fig); })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .then((fig) => {
+        if (!cancelled) setFigure(fig);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [userId, goal, weeks]);
 
   return (
@@ -241,7 +308,11 @@ function OverviewTab({ users }) {
 
         <label style={styles.filterLabel}>
           Goal
-          <select value={goal} onChange={(e) => setGoal(e.target.value)} style={styles.select}>
+          <select
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            style={styles.select}
+          >
             <option value="all">All goals</option>
             <option value="1">Goal 1</option>
             <option value="2">Goal 2</option>
@@ -251,7 +322,11 @@ function OverviewTab({ users }) {
 
         <label style={styles.filterLabel}>
           Weeks
-          <select value={weeks} onChange={(e) => setWeeks(e.target.value)} style={styles.select}>
+          <select
+            value={weeks}
+            onChange={(e) => setWeeks(e.target.value)}
+            style={styles.select}
+          >
             <option value="all">All weeks</option>
             <option value="2-6">Weeks 2–6</option>
             <option value="3-6">Weeks 3–6</option>
@@ -267,11 +342,7 @@ function OverviewTab({ users }) {
       </div>
 
       <div style={styles.plotWrap}>
-        {error ? (
-          <div style={styles.errorText}>{error}</div>
-        ) : (
-          <RosePlot figure={figure} />
-        )}
+        {error ? <div style={styles.errorText}>{error}</div> : <RosePlot figure={figure} />}
       </div>
     </div>
   );
@@ -292,15 +363,22 @@ function GoalProgressTab({ users }) {
     setFigure(null);
 
     const qs = new URLSearchParams({ user_id: userId, goals, weeks }).toString();
+
     fetch(`/api/admin/divergingstackedbarchart?${qs}`, { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(`Chart fetch failed: ${r.status}`);
         return r.json();
       })
-      .then((fig) => { if (!cancelled) setFigure(fig); })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .then((fig) => {
+        if (!cancelled) setFigure(fig);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [userId, goals, weeks]);
 
   return (
@@ -313,7 +391,11 @@ function GoalProgressTab({ users }) {
 
         <label style={styles.filterLabel}>
           Goal
-          <select value={goals} onChange={(e) => setGoals(e.target.value)} style={styles.select}>
+          <select
+            value={goals}
+            onChange={(e) => setGoals(e.target.value)}
+            style={styles.select}
+          >
             <option value="1,2,3">All goals</option>
             <option value="1">Goal 1</option>
             <option value="2">Goal 2</option>
@@ -323,7 +405,11 @@ function GoalProgressTab({ users }) {
 
         <label style={styles.filterLabel}>
           Weeks
-          <select value={weeks} onChange={(e) => setWeeks(e.target.value)} style={styles.select}>
+          <select
+            value={weeks}
+            onChange={(e) => setWeeks(e.target.value)}
+            style={styles.select}
+          >
             <option value="2,3,4,5,6">Weeks 2–6</option>
             <option value="3,4,5,6">Weeks 3–6</option>
             <option value="4,5,6">Weeks 4–6</option>
@@ -360,16 +446,22 @@ function StatsTab() {
 
     Promise.all([
       fetch("/api/admin/stats", { credentials: "include" }).then((r) => r.json()),
-      fetch("/api/admin/stats/activity?days=7", { credentials: "include" }).then((r) => r.json()),
+      fetch("/api/admin/stats/activity?days=7", { credentials: "include" }).then((r) =>
+        r.json()
+      ),
     ])
       .then(([s, a]) => {
         if (cancelled) return;
         setStats(s);
         setActivity(a.activity ?? []);
       })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (error) return <div style={styles.errorText}>{error}</div>;
@@ -385,9 +477,21 @@ function StatsTab() {
         <StatCard label="Admins" value={stats.total_admins} />
         <StatCard label="Active Sessions" value={stats.active_sessions} />
         <StatCard label="Avg Session Duration" value={avgFmt} />
-        <StatCard label="Failed Logins (24h)" value={stats.failed_logins_24h} warn={stats.failed_logins_24h > 0} />
-        <StatCard label="Lockouts (24h)" value={stats.lockouts_24h} warn={stats.lockouts_24h > 0} />
-        <StatCard label="Unauthorized (24h)" value={stats.unauthorized_access_24h} warn={stats.unauthorized_access_24h > 0} />
+        <StatCard
+          label="Failed Logins (24h)"
+          value={stats.failed_logins_24h}
+          warn={stats.failed_logins_24h > 0}
+        />
+        <StatCard
+          label="Lockouts (24h)"
+          value={stats.lockouts_24h}
+          warn={stats.lockouts_24h > 0}
+        />
+        <StatCard
+          label="Unauthorized (24h)"
+          value={stats.unauthorized_access_24h}
+          warn={stats.unauthorized_access_24h > 0}
+        />
         <StatCard label="Registrations (24h)" value={stats.registrations_24h} />
       </div>
 
@@ -399,7 +503,9 @@ function StatsTab() {
               <thead>
                 <tr>
                   {["Date", "Logins", "Failures", "Registrations", "Logouts"].map((h) => (
-                    <th key={h} style={styles.th}>{h}</th>
+                    <th key={h} style={styles.th}>
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -408,7 +514,12 @@ function StatsTab() {
                   <tr key={row.date} style={styles.tr}>
                     <td style={styles.td}>{row.date}</td>
                     <td style={styles.td}>{row.logins}</td>
-                    <td style={{ ...styles.td, color: row.failures > 0 ? "#ffb4b4" : "inherit" }}>
+                    <td
+                      style={{
+                        ...styles.td,
+                        color: row.failures > 0 ? "#ffb4b4" : "inherit",
+                      }}
+                    >
                       {row.failures}
                     </td>
                     <td style={styles.td}>{row.registrations}</td>
@@ -450,9 +561,16 @@ function AuditLogTab() {
         setTotal(data.total ?? 0);
         setLoading(false);
       })
-      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e.message);
+          setLoading(false);
+        }
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [page, eventType]);
 
   useEffect(() => {
@@ -475,7 +593,9 @@ function AuditLogTab() {
           <select value={eventType} onChange={handleEventType} style={styles.select}>
             <option value="">All events</option>
             {EVENT_TYPES.map((et) => (
-              <option key={et} value={et}>{et}</option>
+              <option key={et} value={et}>
+                {et}
+              </option>
             ))}
           </select>
         </label>
@@ -487,7 +607,9 @@ function AuditLogTab() {
           <thead>
             <tr>
               {["Timestamp", "Event", "User ID", "Detail", "IP", "Device"].map((h) => (
-                <th key={h} style={styles.th}>{h}</th>
+                <th key={h} style={styles.th}>
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
@@ -496,26 +618,48 @@ function AuditLogTab() {
               <tr key={e.id} style={styles.tr}>
                 <td style={{ ...styles.td, whiteSpace: "nowrap" }}>{fmtTs(e.timestamp)}</td>
                 <td style={styles.td}>
-                  <span style={{
-                    ...styles.eventBadge,
-                    ...(e.event_type?.includes("FAIL") || e.event_type?.includes("LOCKED") || e.event_type?.includes("UNAUTHORIZED")
-                      ? styles.eventBadgeWarn : {}),
-                  }}>
+                  <span
+                    style={{
+                      ...styles.eventBadge,
+                      ...(e.event_type?.includes("FAIL") ||
+                      e.event_type?.includes("LOCKED") ||
+                      e.event_type?.includes("UNAUTHORIZED")
+                        ? styles.eventBadgeWarn
+                        : {}),
+                    }}
+                  >
                     {e.event_type}
                   </span>
                 </td>
                 <td style={styles.td}>{e.user_id ?? "—"}</td>
-                <td style={{ ...styles.td, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <td
+                  style={{
+                    ...styles.td,
+                    maxWidth: 220,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {e.detail ?? "—"}
                 </td>
-                <td style={{ ...styles.td, fontFamily: "monospace", fontSize: 12 }}>{e.ip_address ?? "—"}</td>
-                <td style={{ ...styles.td, whiteSpace: "nowrap" }} title={e.user_agent ?? ""}>
+                <td style={{ ...styles.td, fontFamily: "monospace", fontSize: 12 }}>
+                  {e.ip_address ?? "—"}
+                </td>
+                <td
+                  style={{ ...styles.td, whiteSpace: "nowrap" }}
+                  title={e.user_agent ?? ""}
+                >
                   {parseDevice(e.user_agent)}
                 </td>
               </tr>
             ))}
             {entries.length === 0 && !loading && (
-              <tr><td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No entries</td></tr>
+              <tr>
+                <td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>
+                  No entries
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -552,9 +696,16 @@ function SessionsTab() {
         setTotal(data.total ?? 0);
         setLoading(false);
       })
-      .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false); } });
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e.message);
+          setLoading(false);
+        }
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [page, activeOnly]);
 
   useEffect(() => {
@@ -572,7 +723,14 @@ function SessionsTab() {
   return (
     <div style={styles.tabContent}>
       <div style={styles.filterRow}>
-        <label style={{ ...styles.filterLabel, flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <label
+          style={{
+            ...styles.filterLabel,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
           <input type="checkbox" checked={activeOnly} onChange={handleActiveOnly} />
           Active sessions only
         </label>
@@ -584,7 +742,9 @@ function SessionsTab() {
           <thead>
             <tr>
               {["User ID", "Login At", "Logout At", "Duration", "IP", "Device"].map((h) => (
-                <th key={h} style={styles.th}>{h}</th>
+                <th key={h} style={styles.th}>
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
@@ -597,20 +757,98 @@ function SessionsTab() {
                 <td style={{ ...styles.td, color: e.logout_at == null ? "#7ecb8f" : "inherit" }}>
                   {fmtDuration(e.duration_seconds)}
                 </td>
-                <td style={{ ...styles.td, fontFamily: "monospace", fontSize: 12 }}>{e.ip_address ?? "—"}</td>
-                <td style={{ ...styles.td, whiteSpace: "nowrap" }} title={e.user_agent ?? ""}>
+                <td style={{ ...styles.td, fontFamily: "monospace", fontSize: 12 }}>
+                  {e.ip_address ?? "—"}
+                </td>
+                <td
+                  style={{ ...styles.td, whiteSpace: "nowrap" }}
+                  title={e.user_agent ?? ""}
+                >
                   {parseDevice(e.user_agent)}
                 </td>
               </tr>
             ))}
             {entries.length === 0 && !loading && (
-              <tr><td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No sessions</td></tr>
+              <tr>
+                <td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>
+                  No sessions
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
       </div>
 
       <Pagination page={page} total={total} perPage={PER_PAGE} onChange={setPage} />
+    </div>
+  );
+}
+
+// ─── Tab: Demographics ────────────────────────────────────────────────────────
+
+function DemographicsTab() {
+  return (
+    <div style={styles.tabContent}>
+      <AdminChartSection
+        title="Age Distribution"
+        subtitle="Demographic summary charts for admin review."
+      >
+        <AgePlot />
+      </AdminChartSection>
+
+      <AdminChartSection
+        title="Likert Distribution by Demographic Group"
+        subtitle="Compare a selected demographic subgroup against the full sample."
+      >
+        <AdminDemographicBarChart />
+      </AdminChartSection>
+
+      <AdminChartSection
+        title="Participant Counts by Demographic Group"
+        subtitle="Unique participant counts across demographic categories."
+      >
+        <AdminCountsDemographics />
+      </AdminChartSection>
+
+      <AdminChartSection
+        title="Participant Attrition Funnel"
+        subtitle="Drop-off across timepoints by demographic group."
+      >
+        <AdminAttritionFunnel />
+      </AdminChartSection>
+    </div>
+  );
+}
+
+function LinguisticsTab() {
+  return (
+    <div style={styles.tabContent}>
+      <AdminChartSection
+        title="Linguistic Markers"
+        subtitle="Admin-only language pattern analysis."
+      >
+        <LinguisticMarkersPlot />
+      </AdminChartSection>
+
+      <AdminChartSection
+        title="Reflection Word Clouds"
+        subtitle="Distinctive reflection language for higher- vs. lower-progress groups."
+      >
+        <LinguisticMarkersWordCloud />
+      </AdminChartSection>
+    </div>
+  );
+}
+
+function AlluvialTab() {
+  return (
+    <div style={styles.tabContent}>
+      <AdminChartSection
+        title="Alluvial Chart"
+        subtitle="Flow-based admin visualization across categories or stages."
+      >
+        <AdminAlluvial />
+      </AdminChartSection>
     </div>
   );
 }
@@ -637,10 +875,16 @@ function QuestionsTab() {
 
     fetch(endpoint, { credentials: "include" })
       .then((r) => r.json())
-      .then((data) => { if (!cancelled) setQuestions(data.questions ?? []); })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .then((data) => {
+        if (!cancelled) setQuestions(data.questions ?? []);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [formType, showHistory]);
 
   useEffect(() => {
@@ -723,7 +967,10 @@ function QuestionsTab() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ form_type: formType, question_text: newText.trim() }),
+        body: JSON.stringify({
+          form_type: formType,
+          question_text: newText.trim(),
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Add failed");
@@ -738,7 +985,6 @@ function QuestionsTab() {
 
   return (
     <div style={styles.tabContent}>
-      {/* Form type subtabs */}
       <div style={styles.subTabBar}>
         {FORM_TYPES.map((ft) => (
           <button
@@ -752,7 +998,17 @@ function QuestionsTab() {
             {ft.toUpperCase()}
           </button>
         ))}
-        <label style={{ ...styles.filterLabel, flexDirection: "row", alignItems: "center", gap: 6, marginLeft: "auto", fontSize: 13 }}>
+
+        <label
+          style={{
+            ...styles.filterLabel,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            marginLeft: "auto",
+            fontSize: 13,
+          }}
+        >
           <input
             type="checkbox"
             checked={showHistory}
@@ -766,8 +1022,11 @@ function QuestionsTab() {
 
       <div style={styles.questionList}>
         {questions.length === 0 && (
-          <div style={{ padding: 16, opacity: 0.5 }}>No questions for {formType.toUpperCase()}.</div>
+          <div style={{ padding: 16, opacity: 0.5 }}>
+            No questions for {formType.toUpperCase()}.
+          </div>
         )}
+
         {questions.map((q, idx) => (
           <div
             key={q.id}
@@ -777,7 +1036,7 @@ function QuestionsTab() {
             }}
           >
             <div style={styles.questionMeta}>
-              <span style={styles.questionNum}>Q{q.question_number ?? (idx + 1)}</span>
+              <span style={styles.questionNum}>Q{q.question_number ?? idx + 1}</span>
               {q.status === "inactive" && <span style={styles.inactiveTag}>inactive</span>}
             </div>
 
@@ -806,11 +1065,19 @@ function QuestionsTab() {
               <div style={styles.questionActions}>
                 {q.status !== "inactive" && (
                   <>
-                    <button style={styles.btnGhost} onClick={() => startEdit(q)}>Edit</button>
+                    <button style={styles.btnGhost} onClick={() => startEdit(q)}>
+                      Edit
+                    </button>
                     <button
-                      style={{ ...styles.btnGhost, color: "#ffb4b4", borderColor: "#ffb4b4" }}
+                      style={{
+                        ...styles.btnGhost,
+                        color: "#ffb4b4",
+                        borderColor: "#ffb4b4",
+                      }}
                       onClick={() => {
-                        if (window.confirm(`Deactivate Q${q.question_number}?`)) deactivate(q);
+                        if (window.confirm(`Deactivate Q${q.question_number}?`)) {
+                          deactivate(q);
+                        }
                       }}
                     >
                       Deactivate
@@ -819,7 +1086,11 @@ function QuestionsTab() {
                 )}
                 {q.status === "inactive" && (
                   <button
-                    style={{ ...styles.btnGhost, color: "#7ecb8f", borderColor: "#7ecb8f" }}
+                    style={{
+                      ...styles.btnGhost,
+                      color: "#7ecb8f",
+                      borderColor: "#7ecb8f",
+                    }}
                     onClick={() => reactivate(q)}
                     disabled={saving}
                   >
@@ -833,7 +1104,9 @@ function QuestionsTab() {
       </div>
 
       <form onSubmit={addQuestion} style={styles.addForm}>
-        <h3 style={{ ...styles.sectionHeading, marginTop: 0 }}>Add question to {formType.toUpperCase()}</h3>
+        <h3 style={{ ...styles.sectionHeading, marginTop: 0 }}>
+          Add question to {formType.toUpperCase()}
+        </h3>
         <textarea
           style={styles.editTextarea}
           placeholder="Question text…"
@@ -841,7 +1114,11 @@ function QuestionsTab() {
           onChange={(e) => setNewText(e.target.value)}
           rows={2}
         />
-        <button type="submit" style={styles.btnPrimary} disabled={saving || !newText.trim()}>
+        <button
+          type="submit"
+          style={styles.btnPrimary}
+          disabled={saving || !newText.trim()}
+        >
           Add question
         </button>
       </form>
@@ -855,7 +1132,6 @@ export default function AdminPage({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState("Overview");
   const [users, setUsers] = useState([]);
 
-  // Load users once (used by Overview tab's UserSearch)
   useEffect(() => {
     fetch("/api/admin/users", { credentials: "include" })
       .then((r) => r.json())
@@ -869,7 +1145,9 @@ export default function AdminPage({ user, onLogout }) {
         <div style={styles.card}>
           <p style={{ opacity: 0.85, margin: 0 }}>You don't have access to this page.</p>
           <div style={{ marginTop: 14 }}>
-            <Link to="/dashboard" style={styles.pillBtn}>← Back to Dashboard</Link>
+            <Link to="/dashboard" style={styles.pillBtn}>
+              ← Back to Dashboard
+            </Link>
           </div>
         </div>
       </HomeLayout>
@@ -881,7 +1159,11 @@ export default function AdminPage({ user, onLogout }) {
       user={user}
       onLogout={onLogout}
       title="Admin"
-      rightSlot={<Link to="/dashboard" style={styles.pillBtn}>← Dashboard</Link>}
+      rightSlot={
+        <Link to="/dashboard" style={styles.pillBtn}>
+          ← Dashboard
+        </Link>
+      }
     >
       <div style={styles.card}>
         <TabBar active={activeTab} onChange={setActiveTab} />
@@ -891,13 +1173,16 @@ export default function AdminPage({ user, onLogout }) {
         {activeTab === "Stats" && <StatsTab />}
         {activeTab === "Audit Log" && <AuditLogTab />}
         {activeTab === "Sessions" && <SessionsTab />}
+        {activeTab === "Demographics" && <DemographicsTab />}
+        {activeTab === "Linguistics" && <LinguisticsTab />}
+        {activeTab === "Alluvial" && <AlluvialTab />}
         {activeTab === "Questions" && <QuestionsTab />}
       </div>
     </HomeLayout>
   );
 }
 
-// ─── Styles (CSS variables throughout) ───────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = {
   card: {
@@ -909,7 +1194,6 @@ const styles = {
     backdropFilter: "blur(8px)",
   },
 
-  // Tab bar
   tabBar: {
     display: "flex",
     gap: 2,
@@ -940,7 +1224,6 @@ const styles = {
     gap: 14,
   },
 
-  // Sub-tabs for Questions
   subTabBar: {
     display: "flex",
     gap: 6,
@@ -964,7 +1247,6 @@ const styles = {
     color: "var(--text-primary)",
   },
 
-  // Filter row
   filterRow: {
     display: "flex",
     gap: 12,
@@ -980,7 +1262,6 @@ const styles = {
     color: "var(--text-dim)",
   },
 
-  // Select
   select: {
     padding: "9px 11px",
     borderRadius: 10,
@@ -991,7 +1272,6 @@ const styles = {
     fontSize: 13,
   },
 
-  // User search
   searchInputWrap: {
     position: "relative",
     display: "flex",
@@ -1057,7 +1337,28 @@ const styles = {
     color: "#7b9eff",
   },
 
-  // Plot
+  sectionBlock: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  sectionHeader: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  sectionTitle: {
+    margin: 0,
+    fontSize: 18,
+    fontWeight: 800,
+    color: "var(--text-primary)",
+  },
+  sectionSubtitle: {
+    margin: 0,
+    fontSize: 13,
+    color: "var(--text-dim)",
+  },
+
   plotWrap: {
     borderRadius: 12,
     border: "1px solid var(--subtle-border)",
@@ -1065,7 +1366,6 @@ const styles = {
     padding: 12,
   },
 
-  // Stats
   statGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
@@ -1107,7 +1407,6 @@ const styles = {
     letterSpacing: "0.05em",
   },
 
-  // Table
   tableWrap: {
     overflowX: "auto",
     borderRadius: 10,
@@ -1139,7 +1438,6 @@ const styles = {
     verticalAlign: "top",
   },
 
-  // Event badge
   eventBadge: {
     display: "inline-block",
     padding: "2px 8px",
@@ -1157,7 +1455,6 @@ const styles = {
     color: "#ffb4b4",
   },
 
-  // Pagination
   pagination: {
     display: "flex",
     gap: 12,
@@ -1180,7 +1477,6 @@ const styles = {
     color: "var(--text-dim)",
   },
 
-  // Questions
   questionList: {
     display: "flex",
     flexDirection: "column",
@@ -1260,7 +1556,6 @@ const styles = {
     marginTop: 8,
   },
 
-  // Buttons
   btnPrimary: {
     padding: "9px 18px",
     borderRadius: 10,
@@ -1283,7 +1578,6 @@ const styles = {
     cursor: "pointer",
   },
 
-  // Nav pill
   pillBtn: {
     padding: "8px 12px",
     borderRadius: 12,

@@ -13,7 +13,7 @@ export default function LinguisticMarkersWordCloud({
     // If parent prefetched the data, skip the self-fetch
     if (prefetchedFigure !== undefined) return;
 
-    fetch("/api/visualizations/linguisticmarkerswordcloud", {
+    fetch("/api/admin/linguisticmarkerswordcloud", {
       credentials: "include",
     })
       .then((res) => {

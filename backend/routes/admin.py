@@ -316,3 +316,84 @@ def admin_linguisticmarkersplot():
     except Exception:
         logger.error("Failed to generate admin linguistic markers plot", exc_info=True)
         return jsonify({"error": "Failed to generate admin visualization"}), 500
+
+
+@admin_bp.route("/linguisticmarkerswordcloud", methods=["GET"])
+@admin_required
+def admin_linguisticmarkerswordcloud():
+    """
+    GET /api/admin/linguisticmarkerswordcloud
+    Returns the Plotly figure dict for the admin-only linguistic markers word cloud.
+    """
+    try:
+        wc_mod = importlib.import_module("analysis.linguisticmarkerswordcloud")
+
+        fig_dict = wc_mod.build_figure(db.engine)
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate admin linguistic markers word cloud", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500
+
+@admin_bp.route("/demographic-barchart", methods=["GET"])
+@admin_required
+def admin_demographic_barchart():
+    """
+    GET /api/admin/demographic-barchart?demo_label=Gender&group_val=Female&timepoint=1&question_key=Q1
+    Returns the Plotly figure dict for the admin demographic bar chart.
+    """
+    try:
+        demo_mod = importlib.import_module("analysis.admin_demographic_barchart")
+
+        data = demo_mod.fetch_data(db.engine)
+        fig_dict = demo_mod.build_figure(
+            data,
+            demo_label=request.args.get("demo_label", "Gender"),
+            group_val=request.args.get("group_val", "Female"),
+            timepoint=request.args.get("timepoint", 1),
+            question_key=request.args.get("question_key", "Q1"),
+        )
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate admin demographic bar chart", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500
+
+@admin_bp.route("/counts-demographics", methods=["GET"])
+@admin_required
+def admin_counts_demographics():
+    """
+    GET /api/admin/counts-demographics?demo_label=Gender
+    Returns the Plotly figure dict for participant counts by demographic group.
+    """
+    try:
+        demo_mod = importlib.import_module("analysis.admin_counts_demographics")
+
+        data = demo_mod.fetch_data(db.engine)
+        fig_dict = demo_mod.build_figure(
+            data,
+            demo_label=request.args.get("demo_label", "Gender"),
+        )
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate admin counts demographics chart", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500
+
+@admin_bp.route("/attrition-funnel", methods=["GET"])
+@admin_required
+def admin_attrition_funnel():
+    """
+    GET /api/admin/attrition-funnel?demo_key=Gender&grp_name=Female
+    Returns the Plotly figure dict for participant attrition funnel.
+    """
+    try:
+        mod = importlib.import_module("analysis.admin_attrition_funnel")
+
+        fig_dict = mod.build_figure(
+            db.engine,
+            demo_key=request.args.get("demo_key", "Overall"),
+            grp_name=request.args.get("grp_name", "All Participants"),
+        )
+
+        return jsonify(fig_dict), 200
+    except Exception:
+        logger.error("Failed to generate attrition funnel", exc_info=True)
+        return jsonify({"error": "Failed to generate admin visualization"}), 500

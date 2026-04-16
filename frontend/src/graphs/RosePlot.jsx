@@ -5,13 +5,11 @@ export default function RosePlot({ figure: prefetchedFigure }) {
   const [figure, setFigure] = useState(prefetchedFigure ?? null);
   const [error, setError] = useState(null);
 
-  // ✅ If parent passes a new figure (filters changed), update the plot
   useEffect(() => {
     setFigure(prefetchedFigure ?? null);
     setError(null);
   }, [prefetchedFigure]);
 
-  // ✅ Only self-fetch when parent did NOT provide a figure prop at all
   useEffect(() => {
     if (prefetchedFigure !== undefined) return;
 
@@ -20,15 +18,22 @@ export default function RosePlot({ figure: prefetchedFigure }) {
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         return res.json();
       })
-      .then((fig) => setFigure(fig))
-      .catch((err) => setError(err.message));
+      .then((fig) => {
+        setFigure(fig);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err.message || "Failed to load rose plot.");
+      });
   }, [prefetchedFigure]);
 
   if (error) {
     return (
       <div style={styles.fallback}>
         <p style={styles.errorText}>Could not load rose plot: {error}</p>
-        <p style={styles.hint}>Make sure the Flask backend is running on port 5000.</p>
+        <p style={styles.hint}>
+          Make sure the Flask backend is running on port 5000.
+        </p>
       </div>
     );
   }
@@ -42,7 +47,6 @@ export default function RosePlot({ figure: prefetchedFigure }) {
     );
   }
 
-  // No data — show a clean prompt instead of a blank Plotly grid
   if (!figure.data || figure.data.length === 0) {
     return (
       <div style={styles.fallback}>
@@ -54,15 +58,57 @@ export default function RosePlot({ figure: prefetchedFigure }) {
     );
   }
 
-  // Override layout to fit our dark theme container
+  const baseLayout = figure.layout || {};
+
+  const adjustedAnnotations = (baseLayout.annotations || []).map((ann) => ({
+    ...ann,
+    y: typeof ann.y === "number" ? ann.y + 0.06 : ann.y,
+    yanchor: "bottom",
+  }));
+
+  const adjustedLayout = { ...baseLayout };
+
+  Object.keys(baseLayout).forEach((key) => {
+    if (key === "polar" || /^polar\d+$/.test(key)) {
+      const polarConfig = baseLayout[key] || {};
+      const domain = polarConfig.domain || {};
+      const x = Array.isArray(domain.x) ? domain.x : [0, 1];
+      const y = Array.isArray(domain.y) ? domain.y : [0, 1];
+
+      adjustedLayout[key] = {
+        ...polarConfig,
+        domain: {
+          x: [
+            Math.max(0, x[0] + 0.03),
+            Math.min(1, x[1] - 0.03),
+          ],
+          y,
+        },
+        angularaxis: {
+          ...polarConfig.angularaxis,
+          tickfont: {
+            ...(polarConfig.angularaxis?.tickfont || {}),
+            size: 11,
+          },
+        },
+      };
+    }
+  });
+
   const layout = {
-    ...figure.layout,
+    ...adjustedLayout,
+    annotations: adjustedAnnotations,
     autosize: true,
     width: undefined,
     height: 2000,
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
-    margin: { t: 100, l: 40, r: 40, b: 40 },
+    margin: {
+      t: 140,
+      l: 60,
+      r: 60,
+      b: 40,
+    },
   };
 
   return (
@@ -75,7 +121,7 @@ export default function RosePlot({ figure: prefetchedFigure }) {
         displaylogo: false,
         modeBarButtonsToRemove: ["lasso2d", "select2d"],
       }}
-      style={{ width: "100%", minHeight: 800 }}
+      style={{ width: "100%", minHeight: 900 }}
       useResizeHandler
     />
   );

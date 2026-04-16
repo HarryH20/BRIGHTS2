@@ -186,10 +186,6 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
         <section style={{ ...styles.card, gridColumn: "1 / -1" }}>
           <div style={styles.cardHeader}>
             <h2 style={styles.h2}>Latest / Most Recent</h2>
-
-            <Link to="/graphs" style={styles.primaryBtn}>
-              View Survey Graphs
-            </Link>
           </div>
 
           <div style={styles.recentList}>
