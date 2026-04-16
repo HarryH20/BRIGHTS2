@@ -10,19 +10,21 @@ import LinguisticMarkersWordCloud from "../graphs/LinguisticMarkersWordCloud.jsx
 import AdminDemographicBarChart from "../graphs/AdminDemographicBarChart.jsx";
 import AdminCountsDemographics from "../graphs/AdminCountsDemographics.jsx";
 import AdminAttritionFunnel from "../graphs/AdminAttritionFunnel.jsx";
+import AdminUserProfile from "../graphs/AdminUserProfile.jsx";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TABS = [
   "Overview",
+  "User Profile",
   "Goal Progress",
-  "Stats",
-  "Audit Log",
-  "Sessions",
   "Demographics",
   "Linguistics",
   "Alluvial",
   "Questions",
+  "Stats",
+  "Audit Log",
+  "Sessions",
 ];
 
 const FORM_TYPES = ["t1", "t2", "t3t5", "t6"];
@@ -348,6 +350,72 @@ function OverviewTab({ users }) {
   );
 }
 
+// ─── Tab: User Profile ─────────────────────────────────────────────────────────
+
+function UserTab({ users }) {
+  const [userId, setUserId] = useState("all");
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+
+  function normalizeUserId(v) {
+    if (!v) return "all";
+    if (v === "all") return "all";
+    const m = v.match(/#(\d+)/);
+    if (m) return m[1];
+    if (/^\d+$/.test(v)) return v;
+    return "all";
+  }
+
+  useEffect(() => {
+    setError(null);
+    setData(null);
+
+    const qs = new URLSearchParams({ user_id: userId }).toString();
+
+    fetch(`/api/admin/demographics?${qs}`, { credentials: "include" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Fetch failed: ${r.status}`);
+        return r.json();
+      })
+      .then((fig) => setData(fig))
+      .catch((e) => setError(e.message));
+  }, [userId]);
+
+  return (
+    <div style={styles.tabContent}>
+      <div style={styles.filterRow}>
+        <label style={styles.filterLabel}>
+          User
+          <UserSearch
+            users={users}
+            value={userId}
+            onChange={(v) => setUserId(normalizeUserId(v))}
+          />
+        </label>
+      </div>
+
+      <div
+        style={{
+          borderRadius: 12,
+          border: "1px solid var(--subtle-border)",
+          background: "var(--surface-subtle)",
+          padding: 20,
+        }}
+      >
+        {error && <div style={styles.errorText}>{error}</div>}
+
+        {!error && !data && (
+          <div style={{ opacity: 0.6, padding: 10 }}>Loading…</div>
+        )}
+
+        {data && (
+          <AdminUserProfile userId={userId} prefetchedData={data} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Tab: Goal Progress ───────────────────────────────────────────────────────
 
 function GoalProgressTab({ users }) {
@@ -430,6 +498,348 @@ function GoalProgressTab({ users }) {
           <AdminDivergingPlot figure={figure} />
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Tab: Demographics ────────────────────────────────────────────────────────
+
+function DemographicsTab() {
+  return (
+    <div style={styles.tabContent}>
+      <AdminChartSection
+        title="Age Distribution"
+        subtitle="Demographic summary charts for admin review."
+      >
+        <AgePlot />
+      </AdminChartSection>
+
+      <AdminChartSection
+        title="Likert Distribution by Demographic Group"
+        subtitle="Compare a selected demographic subgroup against the full sample."
+      >
+        <AdminDemographicBarChart />
+      </AdminChartSection>
+
+      <AdminChartSection
+        title="Participant Counts by Demographic Group"
+        subtitle="Unique participant counts across demographic categories."
+      >
+        <AdminCountsDemographics />
+      </AdminChartSection>
+
+      <AdminChartSection
+        title="Participant Attrition Funnel"
+        subtitle="Drop-off across timepoints by demographic group."
+      >
+        <AdminAttritionFunnel />
+      </AdminChartSection>
+    </div>
+  );
+}
+
+function LinguisticsTab() {
+  return (
+    <div style={styles.tabContent}>
+      <AdminChartSection
+        title="Linguistic Markers"
+        subtitle="Admin-only language pattern analysis."
+      >
+        <LinguisticMarkersPlot />
+      </AdminChartSection>
+
+      <AdminChartSection
+        title="Reflection Word Clouds"
+        subtitle="Distinctive reflection language for higher- vs. lower-progress groups."
+      >
+        <LinguisticMarkersWordCloud />
+      </AdminChartSection>
+    </div>
+  );
+}
+
+function AlluvialTab() {
+  return (
+    <div style={styles.tabContent}>
+      <AdminChartSection
+        title="Alluvial Chart"
+        subtitle="Flow-based admin visualization across categories or stages."
+      >
+        <AdminAlluvial />
+      </AdminChartSection>
+    </div>
+  );
+}
+
+// ─── Tab: Questions ───────────────────────────────────────────────────────────
+
+function QuestionsTab() {
+  const [formType, setFormType] = useState("t1");
+  const [questions, setQuestions] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [newText, setNewText] = useState("");
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const loadQuestions = useCallback(() => {
+    let cancelled = false;
+    setError(null);
+
+    const endpoint = showHistory
+      ? `/api/admin/survey/questions/history?form_type=${formType}`
+      : `/api/admin/survey/questions?form_type=${formType}`;
+
+    fetch(endpoint, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setQuestions(data.questions ?? []);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formType, showHistory]);
+
+  useEffect(() => {
+    setEditingId(null);
+    setEditText("");
+    const cancel = loadQuestions();
+    return cancel;
+  }, [loadQuestions]);
+
+  function startEdit(q) {
+    setEditingId(q.id);
+    setEditText(q.question_text);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditText("");
+  }
+
+  async function saveEdit(q) {
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/admin/survey/questions/${q.id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question_text: editText }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Save failed");
+      setQuestions((prev) => prev.map((x) => (x.id === q.id ? data.question : x)));
+      setEditingId(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deactivate(q) {
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/admin/survey/questions/${q.id}/deactivate`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Deactivate failed");
+      loadQuestions();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reactivate(q) {
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/admin/survey/questions/${q.id}/reactivate`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Reactivate failed");
+      loadQuestions();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addQuestion(e) {
+    e.preventDefault();
+    if (!newText.trim()) return;
+    setSaving(true);
+    try {
+      const r = await fetch("/api/admin/survey/questions", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          form_type: formType,
+          question_text: newText.trim(),
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Add failed");
+      setNewText("");
+      loadQuestions();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={styles.tabContent}>
+      <div style={styles.subTabBar}>
+        {FORM_TYPES.map((ft) => (
+          <button
+            key={ft}
+            onClick={() => setFormType(ft)}
+            style={{
+              ...styles.subTabBtn,
+              ...(formType === ft ? styles.subTabBtnActive : {}),
+            }}
+          >
+            {ft.toUpperCase()}
+          </button>
+        ))}
+
+        <label
+          style={{
+            ...styles.filterLabel,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            marginLeft: "auto",
+            fontSize: 13,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showHistory}
+            onChange={(e) => setShowHistory(e.target.checked)}
+          />
+          Show inactive
+        </label>
+      </div>
+
+      {error && <div style={styles.errorText}>{error}</div>}
+
+      <div style={styles.questionList}>
+        {questions.length === 0 && (
+          <div style={{ padding: 16, opacity: 0.5 }}>
+            No questions for {formType.toUpperCase()}.
+          </div>
+        )}
+
+        {questions.map((q, idx) => (
+          <div
+            key={q.id}
+            style={{
+              ...styles.questionRow,
+              ...(q.status === "inactive" ? styles.questionRowInactive : {}),
+            }}
+          >
+            <div style={styles.questionMeta}>
+              <span style={styles.questionNum}>Q{q.question_number ?? idx + 1}</span>
+              {q.status === "inactive" && <span style={styles.inactiveTag}>inactive</span>}
+            </div>
+
+            {editingId === q.id ? (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                <textarea
+                  style={styles.editTextarea}
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  rows={3}
+                />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={styles.btnPrimary} onClick={() => saveEdit(q)} disabled={saving}>
+                    Save
+                  </button>
+                  <button style={styles.btnGhost} onClick={cancelEdit} disabled={saving}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={styles.questionText}>{q.question_text}</div>
+            )}
+
+            {editingId !== q.id && (
+              <div style={styles.questionActions}>
+                {q.status !== "inactive" && (
+                  <>
+                    <button style={styles.btnGhost} onClick={() => startEdit(q)}>
+                      Edit
+                    </button>
+                    <button
+                      style={{
+                        ...styles.btnGhost,
+                        color: "#ffb4b4",
+                        borderColor: "#ffb4b4",
+                      }}
+                      onClick={() => {
+                        if (window.confirm(`Deactivate Q${q.question_number}?`)) {
+                          deactivate(q);
+                        }
+                      }}
+                    >
+                      Deactivate
+                    </button>
+                  </>
+                )}
+                {q.status === "inactive" && (
+                  <button
+                    style={{
+                      ...styles.btnGhost,
+                      color: "#7ecb8f",
+                      borderColor: "#7ecb8f",
+                    }}
+                    onClick={() => reactivate(q)}
+                    disabled={saving}
+                  >
+                    Reactivate
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={addQuestion} style={styles.addForm}>
+        <h3 style={{ ...styles.sectionHeading, marginTop: 0 }}>
+          Add question to {formType.toUpperCase()}
+        </h3>
+        <textarea
+          style={styles.editTextarea}
+          placeholder="Question text…"
+          value={newText}
+          onChange={(e) => setNewText(e.target.value)}
+          rows={2}
+        />
+        <button
+          type="submit"
+          style={styles.btnPrimary}
+          disabled={saving || !newText.trim()}
+        >
+          Add question
+        </button>
+      </form>
     </div>
   );
 }
@@ -784,348 +1194,6 @@ function SessionsTab() {
   );
 }
 
-// ─── Tab: Demographics ────────────────────────────────────────────────────────
-
-function DemographicsTab() {
-  return (
-    <div style={styles.tabContent}>
-      <AdminChartSection
-        title="Age Distribution"
-        subtitle="Demographic summary charts for admin review."
-      >
-        <AgePlot />
-      </AdminChartSection>
-
-      <AdminChartSection
-        title="Likert Distribution by Demographic Group"
-        subtitle="Compare a selected demographic subgroup against the full sample."
-      >
-        <AdminDemographicBarChart />
-      </AdminChartSection>
-
-      <AdminChartSection
-        title="Participant Counts by Demographic Group"
-        subtitle="Unique participant counts across demographic categories."
-      >
-        <AdminCountsDemographics />
-      </AdminChartSection>
-
-      <AdminChartSection
-        title="Participant Attrition Funnel"
-        subtitle="Drop-off across timepoints by demographic group."
-      >
-        <AdminAttritionFunnel />
-      </AdminChartSection>
-    </div>
-  );
-}
-
-function LinguisticsTab() {
-  return (
-    <div style={styles.tabContent}>
-      <AdminChartSection
-        title="Linguistic Markers"
-        subtitle="Admin-only language pattern analysis."
-      >
-        <LinguisticMarkersPlot />
-      </AdminChartSection>
-
-      <AdminChartSection
-        title="Reflection Word Clouds"
-        subtitle="Distinctive reflection language for higher- vs. lower-progress groups."
-      >
-        <LinguisticMarkersWordCloud />
-      </AdminChartSection>
-    </div>
-  );
-}
-
-function AlluvialTab() {
-  return (
-    <div style={styles.tabContent}>
-      <AdminChartSection
-        title="Alluvial Chart"
-        subtitle="Flow-based admin visualization across categories or stages."
-      >
-        <AdminAlluvial />
-      </AdminChartSection>
-    </div>
-  );
-}
-
-// ─── Tab: Questions ───────────────────────────────────────────────────────────
-
-function QuestionsTab() {
-  const [formType, setFormType] = useState("t1");
-  const [questions, setQuestions] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [editText, setEditText] = useState("");
-  const [newText, setNewText] = useState("");
-  const [error, setError] = useState(null);
-  const [saving, setSaving] = useState(false);
-
-  const loadQuestions = useCallback(() => {
-    let cancelled = false;
-    setError(null);
-
-    const endpoint = showHistory
-      ? `/api/admin/survey/questions/history?form_type=${formType}`
-      : `/api/admin/survey/questions?form_type=${formType}`;
-
-    fetch(endpoint, { credentials: "include" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setQuestions(data.questions ?? []);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e.message);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [formType, showHistory]);
-
-  useEffect(() => {
-    setEditingId(null);
-    setEditText("");
-    const cancel = loadQuestions();
-    return cancel;
-  }, [loadQuestions]);
-
-  function startEdit(q) {
-    setEditingId(q.id);
-    setEditText(q.question_text);
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setEditText("");
-  }
-
-  async function saveEdit(q) {
-    setSaving(true);
-    try {
-      const r = await fetch(`/api/admin/survey/questions/${q.id}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question_text: editText }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error ?? "Save failed");
-      setQuestions((prev) => prev.map((x) => (x.id === q.id ? data.question : x)));
-      setEditingId(null);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function deactivate(q) {
-    setSaving(true);
-    try {
-      const r = await fetch(`/api/admin/survey/questions/${q.id}/deactivate`, {
-        method: "POST",
-        credentials: "include",
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error ?? "Deactivate failed");
-      loadQuestions();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function reactivate(q) {
-    setSaving(true);
-    try {
-      const r = await fetch(`/api/admin/survey/questions/${q.id}/reactivate`, {
-        method: "POST",
-        credentials: "include",
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error ?? "Reactivate failed");
-      loadQuestions();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function addQuestion(e) {
-    e.preventDefault();
-    if (!newText.trim()) return;
-    setSaving(true);
-    try {
-      const r = await fetch("/api/admin/survey/questions", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          form_type: formType,
-          question_text: newText.trim(),
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error ?? "Add failed");
-      setNewText("");
-      loadQuestions();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div style={styles.tabContent}>
-      <div style={styles.subTabBar}>
-        {FORM_TYPES.map((ft) => (
-          <button
-            key={ft}
-            onClick={() => setFormType(ft)}
-            style={{
-              ...styles.subTabBtn,
-              ...(formType === ft ? styles.subTabBtnActive : {}),
-            }}
-          >
-            {ft.toUpperCase()}
-          </button>
-        ))}
-
-        <label
-          style={{
-            ...styles.filterLabel,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 6,
-            marginLeft: "auto",
-            fontSize: 13,
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={showHistory}
-            onChange={(e) => setShowHistory(e.target.checked)}
-          />
-          Show inactive
-        </label>
-      </div>
-
-      {error && <div style={styles.errorText}>{error}</div>}
-
-      <div style={styles.questionList}>
-        {questions.length === 0 && (
-          <div style={{ padding: 16, opacity: 0.5 }}>
-            No questions for {formType.toUpperCase()}.
-          </div>
-        )}
-
-        {questions.map((q, idx) => (
-          <div
-            key={q.id}
-            style={{
-              ...styles.questionRow,
-              ...(q.status === "inactive" ? styles.questionRowInactive : {}),
-            }}
-          >
-            <div style={styles.questionMeta}>
-              <span style={styles.questionNum}>Q{q.question_number ?? idx + 1}</span>
-              {q.status === "inactive" && <span style={styles.inactiveTag}>inactive</span>}
-            </div>
-
-            {editingId === q.id ? (
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                <textarea
-                  style={styles.editTextarea}
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  rows={3}
-                />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button style={styles.btnPrimary} onClick={() => saveEdit(q)} disabled={saving}>
-                    Save
-                  </button>
-                  <button style={styles.btnGhost} onClick={cancelEdit} disabled={saving}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={styles.questionText}>{q.question_text}</div>
-            )}
-
-            {editingId !== q.id && (
-              <div style={styles.questionActions}>
-                {q.status !== "inactive" && (
-                  <>
-                    <button style={styles.btnGhost} onClick={() => startEdit(q)}>
-                      Edit
-                    </button>
-                    <button
-                      style={{
-                        ...styles.btnGhost,
-                        color: "#ffb4b4",
-                        borderColor: "#ffb4b4",
-                      }}
-                      onClick={() => {
-                        if (window.confirm(`Deactivate Q${q.question_number}?`)) {
-                          deactivate(q);
-                        }
-                      }}
-                    >
-                      Deactivate
-                    </button>
-                  </>
-                )}
-                {q.status === "inactive" && (
-                  <button
-                    style={{
-                      ...styles.btnGhost,
-                      color: "#7ecb8f",
-                      borderColor: "#7ecb8f",
-                    }}
-                    onClick={() => reactivate(q)}
-                    disabled={saving}
-                  >
-                    Reactivate
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <form onSubmit={addQuestion} style={styles.addForm}>
-        <h3 style={{ ...styles.sectionHeading, marginTop: 0 }}>
-          Add question to {formType.toUpperCase()}
-        </h3>
-        <textarea
-          style={styles.editTextarea}
-          placeholder="Question text…"
-          value={newText}
-          onChange={(e) => setNewText(e.target.value)}
-          rows={2}
-        />
-        <button
-          type="submit"
-          style={styles.btnPrimary}
-          disabled={saving || !newText.trim()}
-        >
-          Add question
-        </button>
-      </form>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AdminPage({ user, onLogout }) {
@@ -1169,14 +1237,15 @@ export default function AdminPage({ user, onLogout }) {
         <TabBar active={activeTab} onChange={setActiveTab} />
 
         {activeTab === "Overview" && <OverviewTab users={users} />}
+        {activeTab === "User Profile" && <UserTab users={users} />}
         {activeTab === "Goal Progress" && <GoalProgressTab users={users} />}
-        {activeTab === "Stats" && <StatsTab />}
-        {activeTab === "Audit Log" && <AuditLogTab />}
-        {activeTab === "Sessions" && <SessionsTab />}
         {activeTab === "Demographics" && <DemographicsTab />}
         {activeTab === "Linguistics" && <LinguisticsTab />}
         {activeTab === "Alluvial" && <AlluvialTab />}
         {activeTab === "Questions" && <QuestionsTab />}
+        {activeTab === "Stats" && <StatsTab />}
+        {activeTab === "Audit Log" && <AuditLogTab />}
+        {activeTab === "Sessions" && <SessionsTab />}
       </div>
     </HomeLayout>
   );
