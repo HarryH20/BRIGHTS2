@@ -3,10 +3,12 @@ import { Link } from "react-router-dom";
 import HomeLayout from "../home/HomeLayout.jsx";
 import RosePlot from "../graphs/RosePlot.jsx";
 import AdminDivergingPlot from "../graphs/AdminDivergingPlot.jsx";
+import AdminDemographics from "../graphs/AdminDemographics.jsx";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const TABS = ["Overview", "Goal Progress", "Stats", "Audit Log", "Sessions", "Questions"];
+const TABS = ["Overview", "Goal Progress", "Demographics", "Stats", "Audit Log", "Sessions", "Questions"];
+
 const FORM_TYPES = ["t1", "t2", "t3t5", "t6"];
 const EVENT_TYPES = [
   "LOGIN_SUCCESS",
@@ -49,8 +51,7 @@ function fmtDuration(seconds) {
   if (seconds == null) return "active";
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
-  if (m === 0) return `${s}s`;
-  return `${m}m ${s}s`;
+  return m === 0 ? `${s}s` : `${m}m ${s}s`;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -160,17 +161,16 @@ function UserSearch({ users, value, onChange }) {
           }}
           onFocus={() => setOpen(true)}
         />
+
         {query ? (
           <button style={styles.clearBtn} onClick={clear} title="Clear">×</button>
         ) : (
-          <span style={{ ...styles.clearBtn, cursor: "default", pointerEvents: "none", fontSize: 11, opacity: 0.4 }}>
-            ▾
-          </span>
+          <span style={{ ...styles.clearBtn, cursor: "default", pointerEvents: "none", fontSize: 11, opacity: 0.4 }}>▾</span>
         )}
       </div>
+
       {open && (
         <div style={styles.searchDropdown}>
-          {/* Always-visible "All users" option */}
           <div
             style={{
               ...styles.searchOption,
@@ -182,9 +182,11 @@ function UserSearch({ users, value, onChange }) {
             <span style={{ fontWeight: 700 }}>All users</span>
             <span style={{ opacity: 0.45, marginLeft: 6, fontSize: 11 }}>{users.length} total</span>
           </div>
+
           {filtered.length === 0 && (
             <div style={{ ...styles.searchOption, opacity: 0.45 }}>No matches</div>
           )}
+
           {filtered.map((u) => (
             <div
               key={u.id}
@@ -220,13 +222,14 @@ function OverviewTab({ users }) {
     setFigure(null);
 
     const qs = new URLSearchParams({ user_id: userId, goal_id: goal, weeks }).toString();
+
     fetch(`/api/admin/roseplot?${qs}`, { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(`Roseplot fetch failed: ${r.status}`);
         return r.json();
       })
-      .then((fig) => { if (!cancelled) setFigure(fig); })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .then((fig) => !cancelled && setFigure(fig))
+      .catch((e) => !cancelled && setError(e.message));
 
     return () => { cancelled = true; };
   }, [userId, goal, weeks]);
@@ -267,11 +270,7 @@ function OverviewTab({ users }) {
       </div>
 
       <div style={styles.plotWrap}>
-        {error ? (
-          <div style={styles.errorText}>{error}</div>
-        ) : (
-          <RosePlot figure={figure} />
-        )}
+        {error ? <div style={styles.errorText}>{error}</div> : <RosePlot figure={figure} />}
       </div>
     </div>
   );
@@ -292,13 +291,14 @@ function GoalProgressTab({ users }) {
     setFigure(null);
 
     const qs = new URLSearchParams({ user_id: userId, goals, weeks }).toString();
+
     fetch(`/api/admin/divergingstackedbarchart?${qs}`, { credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(`Chart fetch failed: ${r.status}`);
         return r.json();
       })
-      .then((fig) => { if (!cancelled) setFigure(fig); })
-      .catch((e) => { if (!cancelled) setError(e.message); });
+      .then((fig) => !cancelled && setFigure(fig))
+      .catch((e) => !cancelled && setError(e.message));
 
     return () => { cancelled = true; };
   }, [userId, goals, weeks]);
@@ -338,10 +338,74 @@ function GoalProgressTab({ users }) {
       </div>
 
       <div style={styles.plotWrap}>
-        {error ? (
-          <div style={styles.errorText}>{error}</div>
-        ) : (
-          <AdminDivergingPlot figure={figure} />
+        {error ? <div style={styles.errorText}>{error}</div> : <AdminDivergingPlot figure={figure} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab: Demographics ─────────────────────────────────────────────────────────
+
+function DemographicsTab({ users }) {
+  const [userId, setUserId] = useState("all");
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+
+  function normalizeUserId(v) {
+    if (!v) return "all";
+    if (v === "all") return "all";
+    const m = v.match(/#(\d+)/);
+    if (m) return m[1];
+    if (/^\d+$/.test(v)) return v;
+    return "all";
+  }
+
+  useEffect(() => {
+    setError(null);
+    setData(null);
+    const qs = new URLSearchParams({ user_id: userId }).toString();
+
+    fetch(`/api/admin/demographics?${qs}`, { credentials: "include" })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Fetch failed: ${r.status}`);
+        return r.json();
+      })
+      .then((fig) => setData(fig))
+      .catch((e) => setError(e.message));
+  }, [userId]);
+
+  return (
+    <div style={styles.tabContent}>
+      <div style={styles.filterRow}>
+        <label style={styles.filterLabel}>
+          User
+          <UserSearch
+            users={users}
+            value={userId}
+            onChange={(v) => setUserId(normalizeUserId(v))}
+          />
+        </label>
+      </div>
+
+      <div
+        style={{
+          borderRadius: 12,
+          border: "1px solid var(--subtle-border)",
+          background: "var(--surface-subtle)",
+          padding: 20
+        }}
+      >
+        {error && <div style={styles.errorText}>{error}</div>}
+
+        {!error && !data && (
+          <div style={{ opacity: 0.6, padding: 10 }}>Loading…</div>
+        )}
+
+        {data && (
+          <AdminDemographics
+            userId={userId}
+            prefetchedData={data}
+          />
         )}
       </div>
     </div>
@@ -394,6 +458,7 @@ function StatsTab() {
       {activity && activity.length > 0 && (
         <>
           <h3 style={styles.sectionHeading}>Activity (last 7 days)</h3>
+
           <div style={styles.tableWrap}>
             <table style={styles.table}>
               <thead>
@@ -498,8 +563,11 @@ function AuditLogTab() {
                 <td style={styles.td}>
                   <span style={{
                     ...styles.eventBadge,
-                    ...(e.event_type?.includes("FAIL") || e.event_type?.includes("LOCKED") || e.event_type?.includes("UNAUTHORIZED")
-                      ? styles.eventBadgeWarn : {}),
+                    ...(e.event_type?.includes("FAIL") ||
+                      e.event_type?.includes("LOCKED") ||
+                      e.event_type?.includes("UNAUTHORIZED")
+                      ? styles.eventBadgeWarn
+                      : {}),
                   }}>
                     {e.event_type}
                   </span>
@@ -514,8 +582,11 @@ function AuditLogTab() {
                 </td>
               </tr>
             ))}
+
             {entries.length === 0 && !loading && (
-              <tr><td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No entries</td></tr>
+              <tr>
+                <td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No entries</td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -603,8 +674,11 @@ function SessionsTab() {
                 </td>
               </tr>
             ))}
+
             {entries.length === 0 && !loading && (
-              <tr><td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No sessions</td></tr>
+              <tr>
+                <td colSpan={6} style={{ ...styles.td, textAlign: "center", opacity: 0.5 }}>No sessions</td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -738,7 +812,6 @@ function QuestionsTab() {
 
   return (
     <div style={styles.tabContent}>
-      {/* Form type subtabs */}
       <div style={styles.subTabBar}>
         {FORM_TYPES.map((ft) => (
           <button
@@ -752,12 +825,9 @@ function QuestionsTab() {
             {ft.toUpperCase()}
           </button>
         ))}
+
         <label style={{ ...styles.filterLabel, flexDirection: "row", alignItems: "center", gap: 6, marginLeft: "auto", fontSize: 13 }}>
-          <input
-            type="checkbox"
-            checked={showHistory}
-            onChange={(e) => setShowHistory(e.target.checked)}
-          />
+          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
           Show inactive
         </label>
       </div>
@@ -790,12 +860,8 @@ function QuestionsTab() {
                   rows={3}
                 />
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button style={styles.btnPrimary} onClick={() => saveEdit(q)} disabled={saving}>
-                    Save
-                  </button>
-                  <button style={styles.btnGhost} onClick={cancelEdit} disabled={saving}>
-                    Cancel
-                  </button>
+                  <button style={styles.btnPrimary} onClick={() => saveEdit(q)} disabled={saving}>Save</button>
+                  <button style={styles.btnGhost} onClick={cancelEdit} disabled={saving}>Cancel</button>
                 </div>
               </div>
             ) : (
@@ -817,6 +883,7 @@ function QuestionsTab() {
                     </button>
                   </>
                 )}
+
                 {q.status === "inactive" && (
                   <button
                     style={{ ...styles.btnGhost, color: "#7ecb8f", borderColor: "#7ecb8f" }}
@@ -833,7 +900,10 @@ function QuestionsTab() {
       </div>
 
       <form onSubmit={addQuestion} style={styles.addForm}>
-        <h3 style={{ ...styles.sectionHeading, marginTop: 0 }}>Add question to {formType.toUpperCase()}</h3>
+        <h3 style={{ ...styles.sectionHeading, marginTop: 0 }}>
+          Add question to {formType.toUpperCase()}
+        </h3>
+
         <textarea
           style={styles.editTextarea}
           placeholder="Question text…"
@@ -841,6 +911,7 @@ function QuestionsTab() {
           onChange={(e) => setNewText(e.target.value)}
           rows={2}
         />
+
         <button type="submit" style={styles.btnPrimary} disabled={saving || !newText.trim()}>
           Add question
         </button>
@@ -849,7 +920,7 @@ function QuestionsTab() {
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminPage({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState("Overview");
@@ -869,7 +940,9 @@ export default function AdminPage({ user, onLogout }) {
         <div style={styles.card}>
           <p style={{ opacity: 0.85, margin: 0 }}>You don't have access to this page.</p>
           <div style={{ marginTop: 14 }}>
-            <Link to="/dashboard" style={styles.pillBtn}>← Back to Dashboard</Link>
+            <Link to="/dashboard" style={styles.pillBtn}>
+              ← Back to Dashboard
+            </Link>
           </div>
         </div>
       </HomeLayout>
@@ -888,6 +961,7 @@ export default function AdminPage({ user, onLogout }) {
 
         {activeTab === "Overview" && <OverviewTab users={users} />}
         {activeTab === "Goal Progress" && <GoalProgressTab users={users} />}
+        {activeTab === "Demographics" && <DemographicsTab users={users} />}
         {activeTab === "Stats" && <StatsTab />}
         {activeTab === "Audit Log" && <AuditLogTab />}
         {activeTab === "Sessions" && <SessionsTab />}
