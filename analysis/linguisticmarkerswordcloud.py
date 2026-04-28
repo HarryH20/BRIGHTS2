@@ -203,7 +203,6 @@ def build_figure(engine):
     fig.update_layout(
         title=dict(
             text=(
-                "<b>Word Clouds: Reflection Language by Progress Group</b><br>"
                 f"<sub>{subtitle}</sub>"
             ),
             font=dict(size=15, color="#e9eefc"),
@@ -213,7 +212,7 @@ def build_figure(engine):
         xaxis=dict(visible=False, range=[0, 1]),
         yaxis=dict(visible=False, range=[0, 1]),
         height=img_height,
-        margin=dict(t=70, l=0, r=0, b=0),
+        margin=dict(t=20, l=0, r=0, b=0),
     )
 
     return fig.to_dict()
