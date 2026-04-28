@@ -131,7 +131,18 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
   if (!ready) return <LoadingScreen status={loadingStatus} />;
 
   return (
-    <HomeLayout user={user} onLogout={onLogout} title={`Welcome, ${user?.display_name || user?.username || "user"}!`}>
+    <HomeLayout 
+      user={user} 
+      onLogout={onLogout} 
+      rightSlot={
+        user?.role === "admin" ? (
+          <Link to="/admin" style={styles.pillBtn}>
+            ← Back to Admin
+          </Link>
+        ) : null
+      }
+      title={`Welcome, ${user?.display_name || user?.username || "user"}!`}
+    >
       <div style={styles.grid} className="grid12">
         {/* Survey prompt */}
         {surveyStatus === "due" && (
@@ -164,52 +175,50 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
               </span>
             </div>
             <div style={styles.trackerRow} className="trackerRowMobile">
-              {surveyCompletion.map((t) => (
-                <div key={t.timepoint} style={{
-                  ...styles.trackerCell,
-                  ...(t.completed ? styles.trackerDone : styles.trackerMissing),
-                }}>
-                  <span style={styles.trackerWeek}>Week {t.timepoint}</span>
-                  <span style={styles.trackerIcon}>{t.completed ? "✓" : "✗"}</span>
-                  {t.submitted_at && (
-                    <span style={styles.trackerDate}>
-                      {new Date(t.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
-                  )}
-                </div>
-              ))}
+              {surveyCompletion.map((t) =>
+                t.completed ? (
+                  <Link
+                    key={t.timepoint}
+                    to={`/survey/week/${t.timepoint}`}
+                    style={{ textDecoration: "none", color: "inherit" }}
+                  >
+                    <div
+                      style={{
+                        ...styles.trackerCell,
+                        ...styles.trackerDone,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span style={styles.trackerWeek}>Week {t.timepoint}</span>
+                      <span style={styles.trackerIcon}>✓</span>
+                      {t.submitted_at && (
+                        <span style={styles.trackerDate}>
+                          {new Date(t.submitted_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                ) : (
+                  <div
+                    key={t.timepoint}
+                    style={{
+                      ...styles.trackerCell,
+                      ...styles.trackerMissing,
+                      opacity: 0.5,
+                      cursor: "not-allowed",
+                    }}
+                  >
+                    <span style={styles.trackerWeek}>Week {t.timepoint}</span>
+                    <span style={styles.trackerIcon}>✗</span>
+                  </div>
+                )
+              )}
             </div>
           </section>
         )}
-
-        {/* Latest / Most Recent */}
-        <section style={{ ...styles.card, gridColumn: "1 / -1" }}>
-          <div style={styles.cardHeader}>
-            <h2 style={styles.h2}>Latest / Most Recent</h2>
-          </div>
-
-          <div style={styles.recentList}>
-            {activeTimepoints.length === 0 ? (
-              <div style={styles.muted}>No survey data available.</div>
-            ) : (
-              activeTimepoints.map((tp, i) => (
-                <div key={tp} style={styles.recentRow} className="recentRowMobile">
-                  <div style={styles.recentName}>
-                    {i === 0 ? `Latest Survey (${TP_LABELS[tp]})` : `${TP_LABELS[tp]} Survey`}
-                  </div>
-                  <div style={styles.recentLinks} className={"recentLinksMobile"}>
-                    <Link style={styles.linkBtn} to={`/surveys/${tp.toLowerCase()}/results`}>
-                      Responses / Results
-                    </Link>
-                    <Link style={styles.linkBtn} to={`/surveys/${tp.toLowerCase()}/analysis`}>
-                      Analysis
-                    </Link>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
 
         {/* Goal Cards */}
         {goals.map((g, idx) => {
@@ -353,6 +362,16 @@ const styles = {
     fontWeight: 700,
     display: "inline-flex",
     alignItems: "center",
+  },
+  pillBtn: {
+    padding: "8px 12px",
+    borderRadius: 12,
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
+    fontWeight: 900,
+    textDecoration: "none",
+    fontSize: 13,
   },
   smallLink: {
     textDecoration: "none",
