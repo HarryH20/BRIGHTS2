@@ -508,29 +508,22 @@ function DemographicsTab() {
   return (
     <div style={styles.tabContent}>
       <AdminChartSection
-        title="Age Distribution"
-        subtitle="Demographic summary charts for admin review."
-      >
-        <AgePlot />
-      </AdminChartSection>
-
-      <AdminChartSection
-        title="Likert Distribution by Demographic Group"
+        title="Likert Distribution"
         subtitle="Compare a selected demographic subgroup against the full sample."
       >
         <AdminDemographicBarChart />
       </AdminChartSection>
 
       <AdminChartSection
-        title="Participant Counts by Demographic Group"
+        title="Participant Counts"
         subtitle="Unique participant counts across demographic categories."
       >
         <AdminCountsDemographics />
       </AdminChartSection>
 
       <AdminChartSection
-        title="Participant Attrition Funnel"
-        subtitle="Drop-off across timepoints by demographic group."
+        title="Participant Attrition"
+        subtitle="Retention drop-off across timepoints by demographic group."
       >
         <AdminAttritionFunnel />
       </AdminChartSection>
@@ -538,25 +531,29 @@ function DemographicsTab() {
   );
 }
 
+// ─── Tab: Linguistics ─────────────────────────────────────────────────────────
+
 function LinguisticsTab() {
   return (
     <div style={styles.tabContent}>
       <AdminChartSection
         title="Linguistic Markers"
-        subtitle="Admin-only language pattern analysis."
+        subtitle="Words and phrases associated with higher vs. lower goal progress across Weeks 2–6."
       >
         <LinguisticMarkersPlot />
       </AdminChartSection>
 
       <AdminChartSection
-        title="Reflection Word Clouds"
-        subtitle="Distinctive reflection language for higher- vs. lower-progress groups."
+        title="Word Clouds"
+        subtitle="Distinctive reflection words used by higher and lower goal progress groups."
       >
         <LinguisticMarkersWordCloud />
       </AdminChartSection>
     </div>
   );
 }
+
+// ─── Tab: Alluvial ────────────────────────────────────────────────────────────
 
 function AlluvialTab() {
   return (
@@ -1229,7 +1226,7 @@ export default function AdminPage({ user, onLogout }) {
       title="Admin"
       rightSlot={
         <Link to="/dashboard" style={styles.pillBtn}>
-          ← Dashboard
+          View as User →
         </Link>
       }
     >
