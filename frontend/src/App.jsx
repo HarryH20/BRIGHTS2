@@ -12,6 +12,7 @@ import OverviewPage from "./home/OverviewPage.jsx";
 import GraphsPage from "./home/GraphsPage.jsx";
 import SurveyForm from "./home/SurveyForm.jsx";
 import AdminPage from "./admin/AdminPage.jsx";
+import SurveyWeekPage from "./home/SurveyWeekPage.jsx";
 
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
@@ -70,13 +71,21 @@ export default function App() {
           checking ? (
             <div style={{ padding: 20 }}>Loading...</div>
           ) : user ? (
-            <Navigate to="/dashboard" replace />
+            <Navigate 
+              to={user.role === "admin" ? "/admin" : "/dashboard"} 
+              replace 
+            />
           ) : (
             <div style={{ padding: 20 }}>
               <Login
                 onLogin={(u) => {
                   setUser(u);
-                  navigate("/dashboard", { replace: true });
+
+                  if (u.role === "admin") {
+                    navigate("/admin", { replace: true });
+                  } else {
+                    navigate("/dashboard", { replace: true });
+                  }
                 }}
                 onGoToRegister={() => navigate("/register")}
               />
@@ -177,15 +186,38 @@ export default function App() {
             />
 
       <Route
-        path="/survey"
+        path="/survey/*"
         element={
           <RequireAuth user={user} checking={checking}>
             <SurveyForm user={user} onLogout={handleLogout} onSurveyComplete={clearChartCache} />
           </RequireAuth>
         }
       />
+      
+      <Route
+        path="/survey/week/:week"
+        element={
+          <RequireAuth user={user} checking={checking}>
+            <SurveyWeekPage user={user} onLogout={handleLogout} />
+          </RequireAuth>
+        }
+      />
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route
+        path="*"
+        element={
+          checking ? (
+            <div style={{ padding: 20 }}>Loading...</div>
+          ) : user ? (
+            <Navigate
+              to={user.role === "admin" ? "/admin" : "/dashboard"}
+              replace
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
     </Routes>
   );
 }
