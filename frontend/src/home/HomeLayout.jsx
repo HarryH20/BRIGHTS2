@@ -28,9 +28,6 @@ export default function HomeLayout({ user, onLogout, title, rightSlot, children 
         </div>
 
         <div style={styles.right}>
-          {user?.role === "admin" && (
-            <Link to="/admin" style={styles.adminBtn}>Admin</Link>
-          )}
           <button type="button" onClick={toggleTheme} style={styles.themeBtn} aria-label="Toggle theme">
             {theme === "dark" ? "☀ Light" : "🌙 Dark"}
           </button>
