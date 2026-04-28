@@ -237,13 +237,12 @@ def build_figure(engine):
     )
 
     fig.update_layout(
-        title=dict(
-            text=(
-                "<b>Linguistic Markers of Goal Progress</b><br>"
-                "<sub>N-grams most predictive of High vs. Low Progress "
-                "(TF-IDF + Logistic Regression on reflection text, T2–T6)</sub>"
-            ),
-            font=dict(size=16, color="#e9eefc"),
+        title=None,
+        margin=dict(
+            t=20, 
+            r=20, 
+            b=20, 
+            l=20
         ),
         xaxis=dict(
             title="Logistic Regression Coefficient",
@@ -260,7 +259,6 @@ def build_figure(engine):
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#c8d6f0"),
         height=700,
-        margin=dict(t=90, l=220, r=80, b=60),
         showlegend=False,
     )
 
