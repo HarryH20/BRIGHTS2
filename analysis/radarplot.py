@@ -185,7 +185,7 @@ def build_figure(data):
     is_simple   = mode == "simple"
     baseline_t  = 2 if is_simple else 1
     compare_tps = list(range(3, 7)) if is_simple else list(range(2, 7))
-    baseline_label = f"T{baseline_t} (baseline)"
+    baseline_label = f"Week {baseline_t} (baseline)"
 
     theta = trait_order + [trait_order[0]]
 
@@ -230,7 +230,7 @@ def build_figure(data):
             r=values_for_time(default_cmp),
             theta=theta,
             mode="lines",
-            name=f"T{default_cmp}",
+            name=f"Week {default_cmp}",
             line=dict(width=3, color=cmp_hex),
             fill="toself",
             fillcolor=_hex_to_rgba(cmp_hex, 0.32),
@@ -241,23 +241,23 @@ def build_figure(data):
     steps = [
         dict(
             method="restyle",
-            label=f"T{t}",
-            args=[{"r": [values_for_time(t)], "name": [f"T{t}"]}, [1]],
+            label=f"Week {t}",
+            args=[{"r": [values_for_time(t)], "name": [f"Week {t}"]}, [1]],
         )
         for t in compare_tps
     ]
 
     subtitle = (
-        "T2 baseline (historical data) vs selected timepoint"
+        "Week 2 baseline vs selected timepoint"
         if is_simple else
-        "T1 baseline vs selected timepoint"
+        "Week 1 baseline vs selected timepoint"
     )
 
     fig.update_layout(
+        height=420,
         title=dict(
             text=(
-                f"<b>Goal Traits Radar — Goal {goal_id}</b>"
-                f"<br><sub>{subtitle}</sub>"
+                f"<sub>{subtitle}</sub>"
             ),
             x=0.5,
             xanchor="center",
@@ -265,19 +265,31 @@ def build_figure(data):
         ),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(t=120, l=60, r=60, b=60),
+        margin=dict(t=110, l=60, r=60, b=10),
         dragmode="zoom",
         showlegend=True,
-        legend=dict(font=dict(color="#c8d6f0")),
+        legend=dict(
+            orientation="h",
+            y=1.08,
+            yanchor="top",
+            x=0.5,
+            xanchor="center",
+            font=dict(color="#c8d6f0")
+        ),
         sliders=[
             dict(
                 active=active_step,
+                y=0.12,
                 currentvalue=dict(prefix="Compare vs: ", font=dict(color="#c8d6f0")),
-                pad=dict(t=40),
+                pad=dict(t=20),
                 steps=steps,
             )
         ],
         polar=dict(
+            domain=dict(
+                x=[0.15, 0.85],
+                y=[0.35, 0.82]
+            ),
             bgcolor="rgba(255,255,255,0)",
             radialaxis=dict(
                 range=[1, 7],
