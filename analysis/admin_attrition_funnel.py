@@ -37,7 +37,7 @@ import plotly.graph_objects as go
 HEX32 = re.compile(r"^[0-9A-Fa-f]{32}$")
 
 TIMEPOINTS = list(range(1, 7))  # 1 … 6
-T_LABELS   = ["T1", "T2", "T3", "T4", "T5", "T6"]
+T_LABELS   = ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5", "Week 6"]
 
 GENDER_MAP = {
     "Gender_1": "Male",            "Gender_2": "Female",
@@ -290,7 +290,7 @@ def build_figure(engine, demo_key="Overall", grp_name="All Participants"):
     counts = attrition[demo_key][grp_name]
     base = counts[0] or 1
 
-    hover_text = [f"{c} ({100 * c // base}% of T1)" for c in counts]
+    hover_text = [f"{c} ({100 * c // base}% of Week 1)" for c in counts]
 
     fig = go.Figure()
     fig.add_trace(go.Funnel(
@@ -313,14 +313,14 @@ def build_figure(engine, demo_key="Overall", grp_name="All Participants"):
     ))
 
     subtitle = (
-        f"N={counts[0]} at T1  ·  {demo_key}: {grp_name}"
+        f"N={counts[0]} at Week 1  ·  {demo_key}: {grp_name}"
         "  ·  unique participants, deduplicated across goals"
     )
 
     fig.update_layout(
         title=dict(
             text=(
-                f"Participant Attrition"
+                f"Participant Attrition Funnel"
                 f"<br><sup style='color:{FONT_SUB}'>{subtitle}</sup>"
             ),
             font=dict(size=17, color=FONT_COL),
