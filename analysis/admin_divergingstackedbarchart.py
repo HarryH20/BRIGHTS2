@@ -149,7 +149,7 @@ def fetch_data(engine, user_id="all", goals="1,2,3", weeks="2,3,4,5,6", user_uui
 
 def build_figure(data):
     # Styling Constants
-    text_color = "#c8d6f0"
+    text_color = "#e9eefc"
     grid_color = "rgba(200,200,200,0.15)"
     bg_transparent = "rgba(0,0,0,0)"
     base_font_size = 18 
@@ -174,10 +174,10 @@ def build_figure(data):
     if user_id == "all":
         header_text = (
             "<b>Goal Progress</b><br>"
-            "<span style='font-size:24px; color:#ffffff;'>All Users</span><br>"
-            f"<span style='font-size:20px; color:#a1b4d5;'>Tracking Goals: {', '.join(map(str, active_goals))}</span>"
+            "<sub>All Users</sub><br>"
+            f"<sub>Tracking Goals: {', '.join(map(str, active_goals))}</sub>"
         )
-        margin_t = 280
+        margin_t = 170
     else:
         goal_items = []
         for g in active_goals:
@@ -187,12 +187,12 @@ def build_figure(data):
         goals_formatted = "<br>".join(goal_items)
         header_text = (
             "<b>Goal Progress</b><br>"
-            f"<span style='font-size:24px; color:#ffffff;'>User #{user_id}</span><br>"
-            f"<span style='font-size:16px; color:#8898b5; font-family:monospace;'>User ID: {user_uuid}</span><br>"
-            f"<span style='font-size:20px; line-height:1.6;'>{goals_formatted}</span>"
+            f"<sub>User #{user_id}</sub><br>"
+            f"<sub>User ID: {user_uuid}</sub><br>"
+            f"<sub>{goals_formatted}</sub>"
         )
         # Added extra padding to absorb the new spacing shift below
-        margin_t = 320 + (35 * len(active_goals))
+        margin_t = 200 + (22 * len(active_goals))
         
     chart_title = dict(
         text=header_text, 
@@ -200,7 +200,7 @@ def build_figure(data):
         y=0.98,          
         xanchor="center", 
         yanchor="top",
-        font=dict(color=text_color, size=32)
+        font=dict(color=text_color, size=20)
     )
 
     questions = {39: 'Made a lot of progress', 40: 'On track with plan', 41: 'Close to achieving goal'}
@@ -285,15 +285,15 @@ def build_figure(data):
         fig.add_trace(go.Bar(y=y_labels, x=a_vals, customdata=c_a, name='Agree', marker_color=colors['Agree'], **bar_opts, showlegend=show_legend, legendgroup='Agree', hovertemplate="%{y}: %{customdata[0]:.0f}% Agree%{customdata[1]}<extra></extra>"), row=row, col=1)
         fig.add_trace(go.Bar(y=y_labels, x=sa_vals, customdata=c_sa, name='Strongly Agree', marker_color=colors['Strongly Agree'], **bar_opts, showlegend=show_legend, legendgroup='Strongly Agree', hovertemplate="%{y}: %{customdata[0]:.0f}% Strongly Agree%{customdata[1]}<extra></extra>"), row=row, col=1)
 
-        fig.add_trace(go.Scatter(y=y_labels, x=[-(val + n_val + 14) for val, n_val in zip(neg_totals, n_half_vals)], text=[f"{val:.0f}%" if val > 0 else "" for val in neg_totals], mode='text', textposition='middle left', showlegend=False, textfont=dict(color=text_color, size=18)), row=row, col=1)
-        fig.add_trace(go.Scatter(y=y_labels, x=[(val + n_val + 14) for val, n_val in zip(pos_totals, n_half_vals)], text=[f"{val:.0f}%" if val > 0 else "" for val in pos_totals], mode='text', textposition='middle right', showlegend=False, textfont=dict(color=text_color, size=18)), row=row, col=1)
+        fig.add_trace(go.Scatter(y=y_labels, x=[-(val + n_val + 14) for val, n_val in zip(neg_totals, n_half_vals)], text=[f"{val:.0f}%" if val > 0 else "" for val in neg_totals], mode='text', textposition='middle left', showlegend=False, textfont=dict(color=text_color, size=12)), row=row, col=1)
+        fig.add_trace(go.Scatter(y=y_labels, x=[(val + n_val + 14) for val, n_val in zip(pos_totals, n_half_vals)], text=[f"{val:.0f}%" if val > 0 else "" for val in pos_totals], mode='text', textposition='middle right', showlegend=False, textfont=dict(color=text_color, size=12)), row=row, col=1)
 
     plot_height = margin_t + 120 + (250 * num_rows)
     
     # Calculate an exact pixel gap above the plotting area (65 pixels).
     # This mathematically prevents the legend from flying up into the text 
     # on tall multi-week charts, while guaranteeing enough space on short 1-week charts!
-    legend_y = 1.0 + (65.0 / (250 * num_rows))
+    legend_y = 1.0 + (40.0 / (250 * num_rows))
     
     fig.update_layout(
         title=chart_title,
@@ -301,7 +301,7 @@ def build_figure(data):
         height=plot_height, 
         paper_bgcolor=bg_transparent, 
         plot_bgcolor=bg_transparent, 
-        margin=dict(t=margin_t, b=80, l=200, r=80), 
+        margin=dict(t=margin_t, b=60, l=60, r=20), 
         bargap=0.15, 
         
         legend=dict(
@@ -317,24 +317,24 @@ def build_figure(data):
 
     for i in range(1, num_rows + 1):
         fig.update_xaxes(
-            title=dict(text="<b>Percentage (%)</b>", font=dict(size=18)) if i == num_rows else None,
-            range=[-145, 145], 
+            title=dict(text="<b>Percentage (%)</b>", font=dict(size=16)) if i == num_rows else None,
+            range=[-120, 120], 
             tickvals=[-100, -50, 0, 50, 100], 
             ticktext=['100', '50', '0', '50', '100'], 
             gridcolor=grid_color, 
             gridwidth=1, 
             zeroline=True, zerolinecolor=text_color, zerolinewidth=1.5, 
-            tickfont=dict(size=16),
+            tickfont=dict(size=14),
             row=i, col=1
         )
         fig.update_yaxes(
-            tickfont=dict(size=18, color=text_color), 
+            tickfont=dict(size=16, color=text_color), 
             row=i, col=1
         )
 
     for annotation in fig['layout']['annotations']:
         if 'Week' in annotation['text']: 
-            annotation['font'] = dict(size=22, color="#7b9eff")
+            annotation['font'] = dict(size=18, color="#7b9eff")
             annotation['y'] = annotation['y'] + 0.015
 
     return fig.to_dict()
