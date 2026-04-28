@@ -50,10 +50,10 @@ export default function RadarPlot({ goalIndex = 0, figure: prefetchedFigure }) {
     ...figure.layout,
     autosize: true,
     width: undefined,
-    height: 540,
+    // height: 540,
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
-    margin: { t: 120, l: 80, r: 80, b: 100 },
+    margin: { t: 80, l: 60, r: 60, b: 60 },
   };
 
   return (
