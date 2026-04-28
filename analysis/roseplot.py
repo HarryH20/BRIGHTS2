@@ -189,7 +189,7 @@ def build_figure(data):
                 panels.append(
                     {
                         "kind": "timepoint",
-                        "title": f"<b>T{t}: {q_label}</b>",
+                        "title": f"<b>Week {t}: {q_label}</b>",
                         "timepoint": t,
                         "q_key": q_key,
                         "score": score,
@@ -256,7 +256,7 @@ def build_figure(data):
                         line=dict(color="white", width=2),
                         opacity=0.9,
                     ),
-                    hovertext=f"T{t}: {LIKERT_LABELS[score]}",
+                    hovertext=f"Week {t}: {LIKERT_LABELS[score]}",
                     hoverinfo="text",
                     showlegend=False,
                 ),
@@ -331,7 +331,7 @@ def build_figure(data):
     fig.update_layout(
         title=dict(
             text=(
-                "<b>Goal Progression Journey (T2 - T6)</b>"
+                "<b>Goal Progression Journey</b>"
                 "<br><sub>Individual responses by timepoint and question</sub>"
             ),
             x=0.5,
