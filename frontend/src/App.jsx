@@ -8,6 +8,7 @@ import Profile from "./home/Profile.jsx";
 import SurveyResults from "./home/SurveyResults.jsx";
 import SurveyAnalysis from "./home/SurveyAnalysis.jsx";
 import GoalPage from "./home/GoalPage.jsx";
+import GoalsOverviewPage from "./home/GoalsOverviewPage.jsx";
 import OverviewPage from "./home/OverviewPage.jsx";
 import SurveyForm from "./home/SurveyForm.jsx";
 import AdminPage from "./admin/AdminPage.jsx";
@@ -146,6 +147,15 @@ export default function App() {
         element={
           <RequireAuth user={user} checking={checking}>
             <SurveyAnalysis user={user} onLogout={handleLogout} />
+          </RequireAuth>
+        }
+      />
+
+      <Route
+        path="/goals"
+        element={
+          <RequireAuth user={user} checking={checking}>
+            <GoalsOverviewPage user={user} onLogout={handleLogout} />
           </RequireAuth>
         }
       />

@@ -207,37 +207,31 @@ select option {
   }
 }
 
-/* HomeLayout header: 3-col grid → 2-row grid on mobile */
-.home-header {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  grid-template-areas: "left center right";
-  gap: 16px;
-}
-.home-header-left   { grid-area: left; }
-.home-header-center { grid-area: center; }
-.home-header-right  { grid-area: right; }
+/* Nav brand: responsive text */
+.brand-short { display: none; }
 
-@media (max-width: 640px) {
-  .home-header {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    grid-template-areas: "left right" "center center" !important;
-    gap: 10px !important;
-    padding: 14px !important;
-  }
-  .home-header-center {
-    text-align: center;
-  }
-  .home-header-center h1 {
-    font-size: 18px !important;
-  }
+@media (max-width: 768px) {
+  .brand-full  { display: none; }
+  .brand-short { display: inline; }
 }
 
-/* Home page padding → tighter on mobile */
+/* Nav labels: icon-only on very narrow screens */
+@media (max-width: 600px) {
+  .nav-label { display: none; }
+  .home-nav .nav-item { gap: 0 !important; padding: 7px 9px !important; }
+}
+
+/* Home main content: tighter padding on mobile */
 @media (max-width: 640px) {
-  .home-page {
+  .home-main {
     padding: 12px !important;
+  }
+}
+
+/* GoalPage sparkline summary cards: stack on mobile */
+@media (max-width: 560px) {
+  .sparkRowMobile {
+    grid-template-columns: 1fr !important;
   }
 }
 

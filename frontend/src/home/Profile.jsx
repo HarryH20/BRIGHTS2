@@ -1,5 +1,4 @@
 import React, { useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 
 export default function Profile({ user, onLogout, onUserUpdate }) {
@@ -252,11 +251,6 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
           </form>
         </section>
 
-        <div style={{ marginTop: 20 }}>
-          <Link to="/dashboard" style={styles.backLink}>
-            ← Back to Dashboard
-          </Link>
-        </div>
       </div>
     </HomeLayout>
   );
@@ -346,11 +340,5 @@ const styles = {
 
   msg: {
     fontSize: 13,
-  },
-
-  backLink: {
-    color: "var(--ghost-color)",
-    fontWeight: 800,
-    textDecoration: "none",
   },
 };

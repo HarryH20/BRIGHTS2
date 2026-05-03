@@ -174,9 +174,6 @@ function SurveyAnalysisContent({
         <Link to={`/surveys/${surveyId}/results`} style={styles.pillLink}>
           Go to Results →
         </Link>
-        <Link to="/dashboard" style={styles.pillLink}>
-          Back to Dashboard
-        </Link>
       </div>
     </div>
   );

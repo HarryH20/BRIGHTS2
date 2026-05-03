@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import RosePlot from "../graphs/RosePlot.jsx";
-import RadarPlot from "../graphs/RadarPlot.jsx";
 import HomeLayout from "./HomeLayout.jsx";
+import GoalCard from "./GoalCard.jsx";
 import OnboardingModal from "./OnboardingModal.jsx";
 import SkeletonCard from "../components/SkeletonCard.jsx";
 import SkeletonGoalCard from "../components/SkeletonGoalCard.jsx";
@@ -10,28 +10,8 @@ import { Target } from "lucide-react";
 
 const ONBOARDED_KEY = "brights2_onboarded";
 
-const LIKERT = {
-  1: "Strongly disagree",
-  2: "Disagree",
-  3: "Somewhat disagree",
-  4: "Neutral",
-  5: "Somewhat agree",
-  6: "Agree",
-  7: "Strongly agree",
-};
-
-const SCORE_COLOR = {
-  1: "#d73027",
-  2: "#fc8d59",
-  3: "#fee090",
-  4: "#aaaaaa",
-  5: "#91bfdb",
-  6: "#4575b4",
-  7: "#2166AC",
-};
-
 const TP_LABELS = { T2: "Week 2", T3: "Week 3", T4: "Week 4", T5: "Week 5", T6: "Week 6" };
-const TP_ORDER = ["T6", "T5", "T4", "T3", "T2"];
+const TP_ORDER  = ["T6", "T5", "T4", "T3", "T2"];
 const TP_WEEK  = { 1: "Week 1", 2: "Week 2", 3: "Week 3", 4: "Week 4", 5: "Week 5", 6: "Week 6" };
 
 export default function Dashboard({ user, onLogout, chartCache, setChartCache }) {
@@ -149,18 +129,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
     {showOnboarding && (
       <OnboardingModal onClose={() => setShowOnboarding(false)} />
     )}
-    <HomeLayout
-      user={user} 
-      onLogout={onLogout} 
-      rightSlot={
-        user?.role === "admin" ? (
-          <Link to="/admin" style={styles.pillBtn}>
-            ← Back to Admin
-          </Link>
-        ) : null
-      }
-      title={`Welcome, ${user?.display_name || user?.username || "user"}!`}
-    >
+    <HomeLayout user={user} onLogout={onLogout}>
       <div style={styles.grid} className="grid12">
         {/* Survey prompt */}
         {surveyStatus === "due" && (
@@ -260,88 +229,15 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
           </section>
         )}
 
-        {goalsLoaded && goals.map((g, idx) => {
-          const latestTp = TP_ORDER.find((tp) =>
-            Object.values(g.timepoints?.[tp] || {}).some((v) => v !== null)
-          );
-          const latestScores = latestTp ? g.timepoints[latestTp] : null;
-          const latestTpIdx = latestTp ? TP_ORDER.indexOf(latestTp) : -1;
-          const prevTp = latestTpIdx >= 0 && latestTpIdx < TP_ORDER.length - 1 ? TP_ORDER[latestTpIdx + 1] : null;
-          const prevScores = prevTp && Object.values(g.timepoints?.[prevTp] || {}).some(v => v !== null) ? g.timepoints[prevTp] : null;
-          const shortTitle = g.text.length > 28 ? g.text.slice(0, 28) + "…" : g.text;
-
-          return (
-            <section
-              key={g.goal_id}
-              className="card-interactive"
-              style={{ ...styles.card, gridColumn: `span ${colSpan}` }}
-            >
-              <div style={styles.cardHeader}>
-                <div className="goal-name-wrapper">
-                  <h2 style={styles.h2}>
-                    Goal {idx + 1}: {shortTitle}
-                  </h2>
-                  <span className="goal-tooltip">{g.text}</span>
-                </div>
-                <Link to={`/goals/${g.goal_id}`} style={styles.smallLink}>
-                  Open →
-                </Link>
-              </div>
-
-              <div style={styles.summaryBox}>
-                <div style={styles.summaryTitle}>
-                  {latestTp ? `${TP_LABELS[latestTp]} Scores` : "Scores"}
-                </div>
-
-                {latestScores ? (
-                  <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
-                    {[["Q39", "Progress"], ["Q40", "Confidence"], ["Q41", "Importance"]].map(
-                      ([q, label]) => (
-                        <div
-                          key={q}
-                          style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}
-                        >
-                          <span style={{ opacity: 0.6, width: 80, flexShrink: 0 }}>{label}</span>
-                          {latestScores[q] != null ? (
-                            <>
-                              <span
-                                style={{
-                                  display: "inline-block",
-                                  width: 10,
-                                  height: 10,
-                                  borderRadius: "50%",
-                                  background: SCORE_COLOR[latestScores[q]],
-                                  flexShrink: 0,
-                                }}
-                              />
-                              <span>{LIKERT[latestScores[q]]}</span>
-                              {prevScores?.[q] != null && (() => {
-                                const d = latestScores[q] - prevScores[q];
-                                return (
-                                  <span style={{ color: d > 0 ? "#4ade80" : d < 0 ? "#f87171" : "#aaaaaa", fontWeight: 700, fontSize: 12 }}>
-                                    {d > 0 ? "▲" : d < 0 ? "▼" : "→"}
-                                  </span>
-                                );
-                              })()}
-                            </>
-                          ) : (
-                            <span style={{ opacity: 0.4 }}>—</span>
-                          )}
-                        </div>
-                      )
-                    )}
-                  </div>
-                ) : (
-                  <div style={styles.muted}>No scores available.</div>
-                )}
-              </div>
-
-              <div style={styles.graphBox}>
-                <RadarPlot figure={radarFigures[idx]} />
-              </div>
-            </section>
-          );
-        })}
+        {goalsLoaded && goals.map((g, idx) => (
+          <GoalCard
+            key={g.goal_id}
+            goal={g}
+            idx={idx}
+            radarFigure={radarFigures[idx]}
+            colSpan={colSpan}
+          />
+        ))}
 
         {/* Overview */}
         <section style={{ ...styles.card, gridColumn: "1 / -1" }}>

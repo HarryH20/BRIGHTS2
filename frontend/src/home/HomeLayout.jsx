@@ -1,113 +1,175 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { LayoutDashboard, Target, TrendingUp, User, Shield } from "lucide-react";
 
-export default function HomeLayout({ user, onLogout, title, rightSlot, children }) {
-  const name = user?.username || "user";
+const NAV = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/goals",     label: "My Goals",  icon: Target          },
+  { to: "/overview",  label: "Progress",  icon: TrendingUp      },
+  { to: "/profile",   label: "Profile",   icon: User            },
+];
+
+export default function HomeLayout({ user, onLogout, children }) {
+  const { pathname } = useLocation();
 
   return (
-    <div className="home-page" style={styles.page}>
-      <header className="home-header" style={styles.header}>
-        <div className="home-header-left" style={styles.left}>
-          <Link to="/profile" style={styles.linkBtn}>
-            {user?.avatar_url ? (
-              <img
-                src={user.avatar_url}
-                alt="avatar"
-                style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", marginRight: 8, flexShrink: 0 }}
-              />
-            ) : null}
-            Profile / Settings
+    <div className="home-page" style={s.page}>
+      <header className="home-header" style={s.header}>
+        <div style={s.navInner}>
+          {/* Brand */}
+          <Link to="/dashboard" style={s.brand}>
+            <span className="brand-full">BRIGHTS2</span>
+            <span className="brand-short">B2</span>
           </Link>
-        </div>
 
-        <div className="home-header-center" style={styles.center}>
-          <h1 style={styles.h1}>{title ?? `Welcome, ${name}!`}</h1>
-          {rightSlot ? <div style={{ marginTop: 8 }}>{rightSlot}</div> : null}
-        </div>
+          {/* Nav links */}
+          <nav style={s.nav} className="home-nav">
+            {NAV.map(({ to, label, icon: Icon }) => {
+              const active =
+                pathname === to ||
+                (to !== "/" && pathname.startsWith(to + "/"));
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  className="nav-item"
+                  style={{ ...s.navLink, ...(active ? s.navActive : {}) }}
+                >
+                  <Icon size={15} />
+                  <span className="nav-label">{label}</span>
+                </Link>
+              );
+            })}
+          </nav>
 
-        <div className="home-header-right" style={styles.right}>
-          <button type="button" onClick={onLogout} style={styles.logoutBtn}>
-            Logout
-          </button>
+          {/* Actions */}
+          <div style={s.actions}>
+            {user?.role === "admin" && (
+              <Link to="/admin" className="nav-item" style={s.actionLink}>
+                <Shield size={14} />
+                <span className="nav-label">Admin</span>
+              </Link>
+            )}
+            <button type="button" onClick={onLogout} style={s.logoutBtn}>
+              Logout
+            </button>
+          </div>
         </div>
       </header>
-      <main style={styles.main}>{children}</main>
+
+      <main className="home-main" style={s.main}>{children}</main>
 
       {user?.participant_id && (
-        <div style={{
-          position: 'fixed',
-          bottom: '12px',
-          right: '16px',
-          fontSize: '10px',
-          opacity: 0.25,
-          color: '#c8d6f0',
-          fontFamily: 'monospace',
-          letterSpacing: '0.05em',
-          pointerEvents: 'none',
-          userSelect: 'none',
-        }}>
-          ID: {user.participant_id}
-        </div>
+        <div style={s.pid}>ID: {user.participant_id}</div>
       )}
     </div>
   );
 }
 
-export const styles = {
+export const styles = {};
+
+const s = {
   page: {
     minHeight: "100vh",
     background: "var(--page-bg)",
     color: "var(--text-primary)",
-    padding: 24,
   },
   header: {
-    maxWidth: 1100,
-    margin: "0 auto 18px",
-    alignItems: "center",
-    padding: 18,
-    borderRadius: 16,
-    border: "1px solid var(--header-border)",
+    position: "sticky",
+    top: 0,
+    zIndex: 100,
     background: "var(--header-bg)",
-    boxShadow: "0 18px 40px rgba(0,0,0,0.35)",
-    backdropFilter: "blur(8px)",
+    borderBottom: "1px solid var(--header-border)",
+    backdropFilter: "blur(12px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 56,
+    boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
   },
-  left: { display: "flex", justifyContent: "flex-start" },
-  center: { textAlign: "center" },
-  right: { display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8 },
-  h1: { margin: 0, fontSize: 28, letterSpacing: 0.2 },
-
-  linkBtn: {
-    padding: "10px 14px",
-    borderRadius: 12,
-    border: "1px solid var(--ghost-border)",
-    background: "var(--ghost-bg)",
-    color: "var(--ghost-color)",
+  navInner: {
+    width: "100%",
+    maxWidth: 1100,
+    padding: "0 24px",
+    display: "grid",
+    gridTemplateColumns: "auto 1fr auto",
+    gap: 16,
+    alignItems: "center",
+  },
+  brand: {
+    fontWeight: 900,
+    fontSize: 18,
+    letterSpacing: "0.06em",
+    color: "var(--text-primary)",
     textDecoration: "none",
-    fontWeight: 700,
+    flexShrink: 0,
+  },
+  nav: {
+    display: "flex",
+    justifyContent: "center",
+    gap: 4,
+  },
+  navLink: {
     display: "inline-flex",
     alignItems: "center",
+    gap: 6,
+    padding: "7px 12px",
+    borderRadius: 10,
+    border: "1px solid transparent",
+    textDecoration: "none",
+    fontWeight: 600,
+    fontSize: 13,
+    color: "var(--text-dim)",
   },
-
-  adminBtn: {
-    padding: "10px 14px",
-    borderRadius: 12,
+  navActive: {
+    color: "var(--text-primary)",
+    background: "rgba(79,124,255,0.14)",
+    border: "1px solid rgba(79,124,255,0.22)",
+  },
+  actions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  actionLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "7px 12px",
+    borderRadius: 10,
     border: "1px solid var(--ghost-border)",
     background: "var(--ghost-bg)",
-    color: "var(--ghost-color)",
     textDecoration: "none",
+    fontWeight: 600,
+    fontSize: 13,
+    color: "var(--text-dim)",
+  },
+  logoutBtn: {
+    padding: "7px 14px",
+    borderRadius: 10,
+    border: "1px solid rgba(248,113,113,0.3)",
+    background: "rgba(248,113,113,0.08)",
+    color: "#f87171",
+    cursor: "pointer",
     fontWeight: 700,
     fontSize: 13,
   },
-
-  logoutBtn: {
-    padding: "10px 14px",
-    borderRadius: 12,
-    border: "1px solid var(--logout-border)",
-    background: "var(--logout-bg)",
-    color: "var(--logout-color)",
-    cursor: "pointer",
-    fontWeight: 700,
+  main: {
+    maxWidth: 1100,
+    margin: "0 auto",
+    padding: 24,
   },
-
-  main: { maxWidth: 1100, margin: "0 auto" },
+  pid: {
+    position: "fixed",
+    bottom: 12,
+    right: 16,
+    fontSize: 10,
+    opacity: 0.25,
+    color: "#c8d6f0",
+    fontFamily: "monospace",
+    letterSpacing: "0.05em",
+    pointerEvents: "none",
+    userSelect: "none",
+  },
 };
