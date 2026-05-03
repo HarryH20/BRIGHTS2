@@ -1,14 +1,20 @@
 import React, { useEffect, useState } from "react";
-import Plot from "react-plotly.js";
+import ReactECharts from "echarts-for-react";
+import AppErrorBoundary from "../components/ErrorBoundary.jsx";
+import AdminChartWrapper from "../components/AdminChartWrapper.jsx";
+import { countsDemographicsToEcharts } from "../lib/plotlyToEcharts.js";
 
-export default function AdminCountsDemographics({
-  figure: prefetchedFigure,
-  initialDemoLabel = "Gender",
-}) {
+const DEMO_OPTIONS = [
+  "Gender", "Age", "Race/Ethnicity", "Marital Status",
+  "Education", "Employment Status", "Annual Income",
+  "Socioeconomic Status", "Religion", "Political Affiliation",
+];
+
+function AdminCountsDemographicsInner({ figure: prefetchedFigure, initialDemoLabel = "Gender" }) {
   const [demoLabel, setDemoLabel] = useState(initialDemoLabel);
-  const [figure, setFigure] = useState(prefetchedFigure ?? null);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(prefetchedFigure == null);
+  const [figure,    setFigure]    = useState(prefetchedFigure ?? null);
+  const [loading,   setLoading]   = useState(prefetchedFigure == null);
+  const [error,     setError]     = useState(null);
 
   useEffect(() => {
     if (prefetchedFigure != null) {
@@ -21,101 +27,63 @@ export default function AdminCountsDemographics({
     setLoading(true);
     setError(null);
 
-    const qs = new URLSearchParams({
-      demo_label: demoLabel,
-    }).toString();
-
-    fetch(`/api/admin/counts-demographics?${qs}`, {
+    fetch(`/api/admin/counts-demographics?demo_label=${encodeURIComponent(demoLabel)}`, {
       credentials: "include",
       signal: controller.signal,
     })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        return res.json();
-      })
-      .then((fig) => {
-        setFigure(fig);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (err.name === "AbortError") return;
-        setError(err.message);
-        setLoading(false);
-      });
+      .then(res => { if (!res.ok) throw new Error(`Server error ${res.status}`); return res.json(); })
+      .then(fig  => { setFigure(fig); setLoading(false); })
+      .catch(err => { if (err.name === "AbortError") return; setError(err.message); setLoading(false); });
 
     return () => controller.abort();
   }, [demoLabel, prefetchedFigure]);
 
-  const layout = {
-    ...(figure?.layout ?? {}),
-    autosize: true,
-    width: undefined,
-    paper_bgcolor: figure?.layout?.paper_bgcolor ?? "rgba(0,0,0,0)",
-    plot_bgcolor: figure?.layout?.plot_bgcolor ?? "rgba(0,0,0,0)",
-  };
+  const option = figure ? countsDemographicsToEcharts(figure) : null;
+
+  const filterSlot = (
+    <select
+      value={demoLabel}
+      onChange={e => setDemoLabel(e.target.value)}
+      style={sel}
+    >
+      {DEMO_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+    </select>
+  );
 
   return (
-    <div style={styles.wrapper}>
-      {error ? (
-        <div style={styles.fallback}>
-          <p style={styles.errorText}>
-            Could not load demographic counts chart: {error}
-          </p>
-        </div>
-      ) : loading || !figure ? (
-        <div style={styles.fallback}>
-          <div style={styles.spinner} />
-          <p style={styles.loadingText}>Loading demographic counts chart...</p>
-        </div>
-      ) : (
-        <Plot
-          data={figure.data}
-          layout={layout}
-          config={{
-            responsive: true,
-            displayModeBar: true,
-            displaylogo: false,
-            modeBarButtonsToRemove: ["lasso2d", "select2d"],
-          }}
-          style={{ width: "100%" }}
-          useResizeHandler
+    <AdminChartWrapper
+      loading={loading}
+      error={error}
+      onRetry={() => { setError(null); setFigure(null); setLoading(true); }}
+      empty={!loading && !error && !option}
+      filterSlot={filterSlot}
+      height={380}
+    >
+      {option && (
+        <ReactECharts
+          option={option}
+          opts={{ renderer: 'svg' }}
+          style={{ height: 380, width: '100%' }}
+          notMerge
         />
       )}
-    </div>
+    </AdminChartWrapper>
   );
 }
 
-const styles = {
-  wrapper: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 16,
-    width: "100%",
-  },
-  fallback: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 220,
-    gap: 12,
-  },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: "3px solid rgba(79,124,255,0.2)",
-    borderTop: "3px solid #4f7cff",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-  loadingText: {
-    color: "#c8d6f0",
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  errorText: {
-    color: "#ff8a8a",
-    fontSize: 14,
-    fontWeight: 600,
-  },
+export default function AdminCountsDemographics(props) {
+  return (
+    <AppErrorBoundary context="chart">
+      <AdminCountsDemographicsInner {...props} />
+    </AppErrorBoundary>
+  );
+}
+
+const sel = {
+  background: 'var(--input-bg)',
+  border: '1px solid var(--input-border)',
+  color: 'var(--text-primary)',
+  borderRadius: 8,
+  padding: '6px 10px',
+  fontSize: 13,
 };

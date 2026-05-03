@@ -1,133 +1,73 @@
-// frontend/src/graphs/AgePlot.jsx
 import React, { useEffect, useState } from "react";
-import Plot from "react-plotly.js";
+import ReactECharts from "echarts-for-react";
+import AppErrorBoundary from "../components/ErrorBoundary.jsx";
+import AdminChartWrapper from "../components/AdminChartWrapper.jsx";
+import { ageDistributionToEcharts } from "../lib/plotlyToEcharts.js";
 
-export default function AgePlot({
-  participantId = null,
-  goalId = null,
-  binSize = 5,
-  minAge = 0,
-  maxAge = 100,
-  figure: prefetchedFigure,
-}) {
-  const [figure, setFigure] = useState(prefetchedFigure ?? null);
-  const [error, setError] = useState(null);
+function AgePlotInner({ figure: prefetchedFigure }) {
+  const [figure,  setFigure]  = useState(prefetchedFigure ?? null);
+  const [loading, setLoading] = useState(prefetchedFigure === undefined);
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
     if (prefetchedFigure !== undefined) {
       setFigure(prefetchedFigure);
-      return;
+      setLoading(false);
+      setError(null);
     }
+  }, [prefetchedFigure]);
 
-    let cancelled = false;
+  useEffect(() => {
+    if (prefetchedFigure !== undefined) return;
+    setLoading(true);
+    fetch("/api/admin/ageplot", { credentials: "include" })
+      .then(res => { if (!res.ok) throw new Error(`Server error ${res.status}`); return res.json(); })
+      .then(fig  => { setFigure(fig); setError(null); })
+      .catch(err => setError(err.message || "Failed to load age distribution chart."))
+      .finally(() => setLoading(false));
+  }, [prefetchedFigure]);
 
-    async function loadFigure() {
-      try {
-        setError(null);
+  const option = figure ? ageDistributionToEcharts(figure) : null;
 
-        const params = new URLSearchParams();
-        params.set("bin_size", String(binSize));
-        params.set("min_age", String(minAge));
-        params.set("max_age", String(maxAge));
-
-        if (participantId) params.set("participant_id", participantId);
-        if (goalId) params.set("goal_id", goalId);
-
-        const res = await fetch(`/api/admin/ageplot?${params.toString()}`, {
-          credentials: "include",
-        });
-
-        const fig = await res.json();
-
-        if (!res.ok) {
-          throw new Error(fig.error || `Server error: ${res.status}`);
-        }
-
-        if (!cancelled) {
-          setFigure(fig);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message || "Failed to load age distribution");
-        }
-      }
-    }
-
-    loadFigure();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [participantId, goalId, binSize, minAge, maxAge, prefetchedFigure]);
-
-  if (error) {
-    return (
-      <div style={styles.fallback}>
-        <p style={styles.errorText}>Could not load age distribution: {error}</p>
-      </div>
-    );
-  }
-
-  if (!figure) {
-    return (
-      <div style={styles.fallback}>
-        <div style={styles.spinner} />
-        <p style={styles.loadingText}>Loading age distribution...</p>
-      </div>
-    );
-  }
-
-  const layout = {
-    ...figure.layout,
-    autosize: true,
-    width: undefined,
-    height: 450,
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(0,0,0,0)",
-    margin: { t: 80, l: 80, r: 80, b: 100 },
-  };
+  const srRows = figure?.data?.[0]
+    ? (figure.data[0].x || []).map((label, i) => ({ label, value: figure.data[0].y?.[i] ?? 0 }))
+    : [];
 
   return (
-    <Plot
-      data={figure.data || []}
-      layout={layout}
-      config={{
-        responsive: true,
-        displayModeBar: true,
-        displaylogo: false,
-        modeBarButtonsToRemove: ["lasso2d", "select2d"],
-      }}
-      style={{ width: "100%" }}
-      useResizeHandler
-    />
+    <AdminChartWrapper
+      loading={loading}
+      error={error}
+      onRetry={() => { setError(null); setFigure(null); setLoading(true); }}
+      empty={!loading && !error && !option}
+      height={380}
+    >
+      {option && (
+        <>
+          <ReactECharts
+            option={option}
+            opts={{ renderer: 'svg' }}
+            style={{ height: 380, width: '100%' }}
+            notMerge
+          />
+          <table className="sr-only">
+            <caption>Age Distribution</caption>
+            <thead><tr><th>Age Range</th><th>Count</th></tr></thead>
+            <tbody>
+              {srRows.map(r => (
+                <tr key={r.label}><td>{r.label}</td><td>{r.value}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </AdminChartWrapper>
   );
 }
 
-const styles = {
-  fallback: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 200,
-    gap: 12,
-  },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: "3px solid rgba(79,124,255,0.2)",
-    borderTop: "3px solid #4f7cff",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-  loadingText: {
-    color: "#c8d6f0",
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  errorText: {
-    color: "#ff8a8a",
-    fontSize: 14,
-    fontWeight: 600,
-  },
-};
+export default function AgePlot(props) {
+  return (
+    <AppErrorBoundary context="chart">
+      <AgePlotInner {...props} />
+    </AppErrorBoundary>
+  );
+}

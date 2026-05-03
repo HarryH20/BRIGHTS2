@@ -7,11 +7,21 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react':   ['react', 'react-dom', 'react-router-dom'],
+          'vendor-query':   ['@tanstack/react-query'],
+          'vendor-echarts': ['echarts', 'echarts-for-react', 'echarts-wordcloud'],
+          'vendor-plotly':  ['react-plotly.js', 'plotly.js'],
+        },
+      },
+    },
   },
   server: {
     proxy: {
       '/auth': 'http://localhost:5000',
-      '/api': 'http://localhost:5000',
+      '/api':  'http://localhost:5000',
     },
   },
 })

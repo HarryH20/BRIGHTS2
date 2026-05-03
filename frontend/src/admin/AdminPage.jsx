@@ -11,6 +11,7 @@ import AdminDemographicBarChart from "../graphs/AdminDemographicBarChart.jsx";
 import AdminCountsDemographics from "../graphs/AdminCountsDemographics.jsx";
 import AdminAttritionFunnel from "../graphs/AdminAttritionFunnel.jsx";
 import AdminUserProfile from "../graphs/AdminUserProfile.jsx";
+import SkeletonAdminTab from "../components/SkeletonAdminTab.jsx";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -404,9 +405,7 @@ function UserTab({ users }) {
       >
         {error && <div style={styles.errorText}>{error}</div>}
 
-        {!error && !data && (
-          <div style={{ opacity: 0.6, padding: 10 }}>Loading…</div>
-        )}
+        {!error && !data && <SkeletonAdminTab charts={2} chartHeight={320} />}
 
         {data && (
           <AdminUserProfile userId={userId} prefetchedData={data} />

@@ -5,6 +5,7 @@
  * Both functions return null when the figure has no meaningful data so the caller
  * can render an empty state instead of crashing.
  */
+import 'echarts-wordcloud';
 
 const OKABE_ITO = ['#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7'];
 
@@ -300,5 +301,696 @@ export function radarPlotToEcharts(figure) {
         symbolSize: 4,
       })),
     }],
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin chart adapters
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LIKERT_COLORS_DIVERGING = {
+  'Neutral':           '#d3d3d3',
+  'Somewhat Disagree': '#fcbe75',
+  'Disagree':          '#f59c3c',
+  'Strongly Disagree': '#D55E00',
+  'Somewhat Agree':    '#92c0df',
+  'Agree':             '#6b9cc3',
+  'Strongly Agree':    '#0072B2',
+};
+
+const LIKERT_COLORS_7 = ['#d73027','#fc8d59','#fee090','#d9d9d9','#91bfdb','#4575b4','#2166ac'];
+
+/**
+ * divergingBarToEcharts — multi-week diverging stacked horizontal bar chart.
+ * Converts a Plotly make_subplots figure (N rows, shared x-axis) from
+ * admin_divergingstackedbarchart.py into a multi-grid ECharts option.
+ */
+export function divergingBarToEcharts(figure) {
+  if (!figure?.data?.length) return null;
+
+  const layout = figure.layout || {};
+
+  // Group bar traces by yaxis attribute ('y', 'y2', 'y3', …)
+  const barsByAxis = {};
+  for (const trace of figure.data) {
+    if (trace.type !== 'bar') continue;
+    const axis = trace.yaxis || 'y';
+    (barsByAxis[axis] = barsByAxis[axis] || []).push(trace);
+  }
+
+  const axes = Object.keys(barsByAxis).sort((a, b) => {
+    const na = a === 'y' ? 1 : parseInt(a.slice(1), 10);
+    const nb = b === 'y' ? 1 : parseInt(b.slice(1), 10);
+    return na - nb;
+  });
+  if (!axes.length) return null;
+
+  const N = axes.length;
+  const annotations = layout.annotations || [];
+  const weekAnnotations = annotations.filter(a => (a.text || '').includes('Week'));
+
+  const textColor = cssVar('--chart-text') || '#e9eefc';
+  const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const gridColor = cssVar('--chart-grid') || 'rgba(255,255,255,0.08)';
+  const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
+  const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
+
+  const titleLines = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const mainTitle = titleLines[0] || 'Goal Progress';
+  const subTitle  = titleLines.slice(1).join(' ').slice(0, 160);
+
+  // Layout constants (px)
+  const rowHeight = 190;
+  const rowGap    = 56;  // room for per-row week label + spacing
+  const topOffset = 92;  // overall title + legend
+  const bottomPad = 50;
+  const totalHeight = topOffset + N * (rowHeight + rowGap) + bottomPad;
+
+  // Insertion order of traces per row:
+  // 0:Neutral(left)  1:SomewhatDisagree  2:Disagree  3:StronglyDisagree
+  // 4:Neutral(right) 5:SomewhatAgree     6:Agree     7:StronglyAgree
+  const TRACE_ORDER = [
+    'Neutral', 'Somewhat Disagree', 'Disagree', 'Strongly Disagree',
+    'Neutral', 'Somewhat Agree',    'Agree',    'Strongly Agree',
+  ];
+  const STACK_SIDE = ['left','left','left','left','right','right','right','right'];
+
+  const grids = [], xAxes = [], yAxes = [], series = [], graphic = [];
+
+  axes.forEach((axis, i) => {
+    const barTraces = barsByAxis[axis];
+    const yLabels   = barTraces[0]?.y || [];
+    const topPx     = topOffset + i * (rowHeight + rowGap);
+
+    grids.push({ top: topPx, height: rowHeight, left: '23%', right: '5%' });
+
+    xAxes.push({
+      gridIndex: i,
+      type: 'value',
+      min: -120, max: 120,
+      axisLabel: { formatter: v => Math.abs(v) + '%', color: dimColor, fontSize: 10 },
+      splitLine: { lineStyle: { color: gridColor } },
+      axisLine:  { lineStyle: { color: gridColor } },
+      axisTick:  { show: false },
+    });
+
+    yAxes.push({
+      gridIndex: i,
+      type: 'category',
+      data: yLabels,
+      axisLabel: { color: textColor, fontSize: 12, width: 160, overflow: 'truncate' },
+      axisLine:  { lineStyle: { color: gridColor } },
+      splitLine: { show: false },
+    });
+
+    const weekLabel = weekAnnotations[i] ? stripHtml(weekAnnotations[i].text) : `Week ${i + 1}`;
+    graphic.push({
+      type: 'text', left: '50%', top: topPx - 24,
+      style: { text: weekLabel, textAlign: 'center', fill: '#7b9eff', fontSize: 14, fontWeight: 'bold' },
+    });
+
+    barTraces.forEach((trace, ti) => {
+      const name  = TRACE_ORDER[ti] || trace.name;
+      const stack = `${STACK_SIDE[ti]}_${i}`;
+      series.push({
+        type: 'bar', name,
+        xAxisIndex: i, yAxisIndex: i,
+        stack,
+        data: trace.x,
+        itemStyle:      { color: LIKERT_COLORS_DIVERGING[name] || '#999' },
+        emphasis:       { focus: 'series' },
+        legendHoverLink: true,
+      });
+    });
+  });
+
+  return {
+    animation: !reducedMotion(), animationDuration: 400,
+    backgroundColor: 'transparent',
+    title: {
+      text: mainTitle, subtext: subTitle,
+      left: 'center', top: 6,
+      textStyle:    { color: textColor, fontSize: 16, fontWeight: 'bold' },
+      subtextStyle: { color: dimColor,  fontSize: 11 },
+    },
+    legend: {
+      data: ['Strongly Disagree','Disagree','Somewhat Disagree','Neutral','Somewhat Agree','Agree','Strongly Agree'],
+      top: 44, left: 'center',
+      textStyle: { color: textColor, fontSize: 10 },
+      itemWidth: 10, itemHeight: 10,
+    },
+    grid: grids, xAxis: xAxes, yAxis: yAxes, series, graphic,
+    tooltip: {
+      trigger: 'axis', axisPointer: { type: 'shadow' },
+      backgroundColor: tooltipBg, borderColor: tooltipBorder,
+      textStyle: { color: textColor },
+      formatter(params) {
+        const label = params[0]?.name || '';
+        const lines = [`<b>${label}</b>`];
+        // deduplicate neutral (appears twice per row)
+        const seen = new Set();
+        for (const p of params) {
+          const key = p.seriesName;
+          if (seen.has(key)) continue;
+          const val = Math.abs(Number(p.value));
+          if (val > 0) { lines.push(`${p.marker}${key}: ${val.toFixed(1)}%`); seen.add(key); }
+        }
+        return lines.join('<br/>');
+      },
+    },
+    _totalHeight: totalHeight,
+  };
+}
+
+/**
+ * demographicBarToEcharts — grouped bar: full-sample vs selected demographic group.
+ * Two-trace Plotly figure from admin_demographic_barchart.py.
+ */
+export function demographicBarToEcharts(figure) {
+  if (!figure?.data?.length) return null;
+
+  const layout = figure.layout || {};
+  const traces  = figure.data.filter(t => t.type === 'bar');
+  if (!traces.length) return null;
+
+  const textColor = cssVar('--chart-text') || '#e9eefc';
+  const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const gridColor = cssVar('--chart-grid') || 'rgba(255,255,255,0.08)';
+  const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
+  const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
+
+  const titleLines  = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const mainTitle   = titleLines[0] || 'Demographic Chart';
+  const subTitle    = titleLines.slice(1).join(' ');
+  const xLabels     = traces[0]?.x || [];
+  const yAxisLabel  = stripHtml(layout.yaxis?.title?.text || '') || '% of Respondents';
+
+  const mkSeries = (trace, opacity) => ({
+    type: 'bar',
+    name: trace.name || 'Series',
+    data: (trace.y || []).map((v, i) => ({
+      value: v,
+      itemStyle: {
+        color: LIKERT_COLORS_7[i] || '#999',
+        opacity,
+        borderColor: opacity > 0.5 ? 'white' : 'rgba(255,255,255,0.2)',
+        borderWidth: opacity > 0.5 ? 1.5 : 1,
+      },
+    })),
+    label: {
+      show: true, position: 'top',
+      color: opacity > 0.5 ? textColor : dimColor,
+      fontSize: 10,
+      formatter: p => Number(p.value).toFixed(1) + '%',
+    },
+    emphasis: { focus: 'series' },
+  });
+
+  const seriesList = [];
+  if (traces[0]) seriesList.push(mkSeries(traces[0], 0.4));
+  if (traces[1]) seriesList.push(mkSeries(traces[1], 0.95));
+
+  return {
+    animation: !reducedMotion(), animationDuration: 500,
+    backgroundColor: 'transparent',
+    title: {
+      text: mainTitle, subtext: subTitle,
+      left: 'center', top: 8,
+      textStyle:    { color: textColor, fontSize: 14, fontWeight: 'bold' },
+      subtextStyle: { color: dimColor,  fontSize: 11 },
+    },
+    legend: { top: 60, left: 'center', textStyle: { color: textColor, fontSize: 11 } },
+    grid: { top: 110, bottom: 80, left: 65, right: 20 },
+    xAxis: {
+      type: 'category', data: xLabels,
+      axisLabel:  { color: textColor, fontSize: 11, rotate: 15 },
+      axisLine:   { lineStyle: { color: gridColor } },
+      splitLine:  { show: false },
+    },
+    yAxis: {
+      type: 'value', name: yAxisLabel,
+      nameTextStyle: { color: dimColor },
+      axisLabel:  { color: dimColor, formatter: v => v + '%' },
+      splitLine:  { lineStyle: { color: gridColor } },
+      axisLine:   { lineStyle: { color: gridColor } },
+    },
+    series: seriesList,
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: tooltipBg, borderColor: tooltipBorder,
+      textStyle: { color: textColor },
+      formatter(params) {
+        const label = params[0]?.name || '';
+        return [`<b>${label}</b>`,
+          ...params.map(p => `${p.marker}${p.seriesName}: ${Number(p.value).toFixed(1)}%`),
+        ].join('<br/>');
+      },
+    },
+  };
+}
+
+/**
+ * countsDemographicsToEcharts — bar chart of participant counts per demographic category.
+ * Extracts the single visible trace from the multi-trace Plotly figure in
+ * admin_counts_demographics.py.
+ */
+export function countsDemographicsToEcharts(figure) {
+  if (!figure?.data?.length) return null;
+
+  const layout = figure.layout || {};
+  const trace   = figure.data.find(t => t.type === 'bar' && t.visible === true)
+                || figure.data.find(t => t.type === 'bar')
+                || null;
+  if (!trace) return null;
+
+  const textColor = cssVar('--chart-text') || '#e9eefc';
+  const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const gridColor = cssVar('--chart-grid') || 'rgba(255,255,255,0.08)';
+  const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
+  const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
+  const colors    = OKABE_ITO.map((fb, i) => cssVar(`--chart-${i + 1}`) || fb);
+
+  const xLabels = trace.x || [];
+  const yCounts = trace.y || [];
+  const textArr = trace.text || [];
+
+  return {
+    animation: !reducedMotion(), animationDuration: 500,
+    backgroundColor: 'transparent',
+    grid: { top: 50, bottom: 70, left: 60, right: 20 },
+    xAxis: {
+      type: 'category', data: xLabels,
+      axisLabel:  { color: textColor, fontSize: 11, rotate: 20 },
+      axisLine:   { lineStyle: { color: gridColor } },
+      splitLine:  { show: false },
+    },
+    yAxis: {
+      type: 'value', name: 'Count',
+      nameTextStyle: { color: dimColor },
+      axisLabel:  { color: dimColor },
+      splitLine:  { lineStyle: { color: gridColor } },
+      axisLine:   { lineStyle: { color: gridColor } },
+    },
+    series: [{
+      type: 'bar',
+      data: yCounts.map((v, i) => ({
+        value: v,
+        itemStyle: { color: colors[i % colors.length] },
+      })),
+      label: {
+        show: true, position: 'top', color: textColor, fontSize: 10,
+        formatter(p) {
+          const raw = textArr[p.dataIndex] || '';
+          const m   = raw.match(/\(([^)]+)\)/);
+          return m ? `${p.value}\n${m[1]}` : String(p.value);
+        },
+      },
+      emphasis: { focus: 'self' },
+    }],
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: tooltipBg, borderColor: tooltipBorder,
+      textStyle: { color: textColor },
+    },
+  };
+}
+
+/**
+ * attritionFunnelToEcharts — funnel chart of participant retention across weeks.
+ * Plotly go.Funnel trace from admin_attrition_funnel.py (y=labels, x=counts).
+ */
+export function attritionFunnelToEcharts(figure) {
+  if (!figure?.data?.length) return null;
+
+  const layout = figure.layout || {};
+  const trace   = figure.data.find(t => t.type === 'funnel') || figure.data[0];
+  if (!trace) return null;
+
+  const textColor = cssVar('--chart-text') || '#e9eefc';
+  const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
+  const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
+  const colors    = OKABE_ITO.map((fb, i) => cssVar(`--chart-${i + 1}`) || fb);
+
+  const titleLines = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const mainTitle  = titleLines[0] || 'Attrition Funnel';
+  const subTitle   = titleLines.slice(1).join(' ');
+
+  const labels = trace.y || [];
+  const counts = trace.x || [];
+  if (!labels.length) return null;
+
+  return {
+    animation: !reducedMotion(), animationDuration: 500,
+    backgroundColor: 'transparent',
+    title: {
+      text: mainTitle, subtext: subTitle,
+      left: 'center', top: 8,
+      textStyle:    { color: textColor, fontSize: 15, fontWeight: 'bold' },
+      subtextStyle: { color: dimColor,  fontSize: 11 },
+    },
+    legend: {
+      data: labels, top: 50, left: 'center',
+      textStyle: { color: textColor, fontSize: 10 },
+    },
+    series: [{
+      type: 'funnel',
+      top: 90, bottom: 20, left: '10%', width: '80%',
+      sort: 'none', gap: 2,
+      label: {
+        show: true, position: 'inside', color: '#fff', fontSize: 12,
+        formatter: p => `${p.name}: ${p.value}`,
+      },
+      labelLine: { show: false },
+      itemStyle: { borderColor: 'rgba(255,255,255,0.15)', borderWidth: 1 },
+      data: labels.map((name, i) => ({
+        name, value: counts[i],
+        itemStyle: { color: colors[i % colors.length] },
+      })),
+      emphasis: { label: { show: true, fontSize: 14 } },
+    }],
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: tooltipBg, borderColor: tooltipBorder,
+      textStyle: { color: textColor },
+      formatter: p => `${p.marker}${p.name}: <b>${p.value}</b>`,
+    },
+  };
+}
+
+/**
+ * linguisticMarkersToEcharts — scatter dot-plot of logistic regression coefficients.
+ * Plotly go.Scatter(mode='markers') from linguisticmarkersplot.py.
+ * x=coefficient values, y=feature labels; positive=high-progress, negative=low-progress.
+ */
+export function linguisticMarkersToEcharts(figure) {
+  if (!figure?.data?.length) return null;
+
+  const layout = figure.layout || {};
+  const trace   = figure.data.find(t => t.type === 'scatter');
+  if (!trace?.x?.length) return null;
+
+  const textColor = cssVar('--chart-text') || '#e9eefc';
+  const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const gridColor = cssVar('--chart-grid') || 'rgba(255,255,255,0.08)';
+  const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
+  const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
+
+  const titleLines = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const mainTitle  = titleLines[0] || 'Linguistic Markers';
+  const subTitle   = titleLines.slice(1).join(' ') || 'Positive = High Progress; Negative = Low Progress';
+
+  const coefs    = trace.x;
+  const features = trace.y;
+  const markerColors = trace.marker?.color || [];
+
+  return {
+    animation: !reducedMotion(), animationDuration: 500,
+    backgroundColor: 'transparent',
+    title: {
+      text: mainTitle, subtext: subTitle,
+      left: 'center', top: 8,
+      textStyle:    { color: textColor, fontSize: 15, fontWeight: 'bold' },
+      subtextStyle: { color: dimColor,  fontSize: 11 },
+    },
+    grid: { top: 80, bottom: 40, left: '22%', right: '4%' },
+    xAxis: {
+      type: 'value', name: 'Coefficient',
+      nameTextStyle: { color: dimColor },
+      axisLabel:  { color: dimColor, fontSize: 10 },
+      splitLine:  { lineStyle: { color: gridColor } },
+      axisLine:   { lineStyle: { color: gridColor } },
+      splitNumber: 6,
+    },
+    yAxis: {
+      type: 'category', data: features,
+      axisLabel:  { color: textColor, fontSize: 11 },
+      axisLine:   { lineStyle: { color: gridColor } },
+      splitLine:  { show: false },
+    },
+    series: [{
+      type: 'scatter',
+      data: coefs.map((c, i) => ({
+        value: [c, features[i]],
+        itemStyle: {
+          color: Array.isArray(markerColors)
+            ? (markerColors[i] || (c >= 0 ? '#2ecc71' : '#e74c3c'))
+            : (c >= 0 ? '#2ecc71' : '#e74c3c'),
+        },
+      })),
+      symbolSize: 10,
+      markLine: {
+        silent: true, symbol: 'none',
+        lineStyle: { color: textColor, type: 'dashed', width: 1, opacity: 0.5 },
+        data: [{ xAxis: 0 }],
+        label: { show: false },
+      },
+    }],
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: tooltipBg, borderColor: tooltipBorder,
+      textStyle: { color: textColor },
+      formatter: p => `${p.value[1]}<br/>Coefficient: <b>${Number(p.value[0]).toFixed(4)}</b>`,
+    },
+  };
+}
+
+/**
+ * wordCloudToEcharts — extracts the matplotlib-generated base64 PNG image from the
+ * Plotly layout image. The backend embeds a rendered PNG; no ECharts rendering is needed.
+ * Returns { _isImage, imageSource, subtitle } — component renders an <img> tag.
+ */
+export function wordCloudToEcharts(figure) {
+  if (!figure) return null;
+  const images = figure.layout?.images;
+  if (images?.length) {
+    const src = images[0]?.source;
+    if (src) {
+      return {
+        _isImage: true,
+        imageSource: src,
+        subtitle: stripHtml(figure.layout?.title?.text || ''),
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * alluvialToEcharts — converts a single Plotly Sankey figure dict to ECharts sankey.
+ * Called once per question figure (caller iterates over the response structure).
+ */
+export function alluvialToEcharts(figure) {
+  if (!figure?.data?.length) return null;
+
+  const trace = figure.data.find(t => t.type === 'sankey');
+  if (!trace) return null;
+
+  const layout = figure.layout || {};
+  const textColor = cssVar('--chart-text') || '#e9eefc';
+  const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
+  const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
+
+  const titleLines = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const mainTitle  = titleLines[0] || '';
+  const subTitle   = titleLines.slice(1).join(' ');
+
+  const nodeLabels = trace.node?.label  || [];
+  const nodeColors = trace.node?.color  || [];
+  const srcArr     = trace.link?.source || [];
+  const tgtArr     = trace.link?.target || [];
+  const valArr     = trace.link?.value  || [];
+  const colArr     = trace.link?.color  || [];
+
+  if (!srcArr.length) return null;
+
+  const nodes = nodeLabels.map((name, i) => ({
+    name,
+    itemStyle: { color: nodeColors[i] || '#999' },
+    label: { color: textColor, fontSize: 10 },
+  }));
+
+  const links = srcArr.map((s, i) => ({
+    source:    nodeLabels[s],
+    target:    nodeLabels[tgtArr[i]],
+    value:     valArr[i],
+    lineStyle: { color: colArr[i] || 'rgba(150,150,150,0.3)' },
+  }));
+
+  return {
+    animation: !reducedMotion(), animationDuration: 600,
+    backgroundColor: 'transparent',
+    title: {
+      text: mainTitle, subtext: subTitle,
+      left: 'center', top: 6,
+      textStyle:    { color: textColor, fontSize: 13, fontWeight: 'bold' },
+      subtextStyle: { color: dimColor,  fontSize: 10 },
+    },
+    series: [{
+      type: 'sankey',
+      layout: 'none',
+      left: '5%', right: '5%', top: 60, bottom: 20,
+      data: nodes, links,
+      emphasis: { focus: 'adjacency' },
+      lineStyle: { curveness: 0.5 },
+      nodeWidth: 20, nodeGap: 15,
+      label: { color: textColor, fontSize: 11 },
+    }],
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: tooltipBg, borderColor: tooltipBorder,
+      textStyle: { color: textColor },
+    },
+  };
+}
+
+/**
+ * userProfileToEcharts — converts one demographic category object to an ECharts option.
+ * Input: { type: 'bar'|'donut', title, labels, values, highlight, subtitle }
+ * This does NOT receive a Plotly figure — the endpoint returns structured JSON directly.
+ */
+export function userProfileToEcharts(categoryData) {
+  if (!categoryData?.labels?.length) return null;
+
+  const { type, labels, values, highlight } = categoryData;
+
+  const textColor = cssVar('--chart-text') || '#e9eefc';
+  const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const gridColor = cssVar('--chart-grid') || 'rgba(255,255,255,0.08)';
+  const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
+  const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
+  const colors    = OKABE_ITO.map((fb, i) => cssVar(`--chart-${i + 1}`) || fb);
+  const accent    = cssVar('--accent') || '#4f7cff';
+
+  if (type === 'bar') {
+    return {
+      animation: !reducedMotion(),
+      backgroundColor: 'transparent',
+      grid: { top: 30, bottom: 55, left: 45, right: 10 },
+      xAxis: {
+        type: 'category', data: labels,
+        axisLabel: { color: textColor, fontSize: 9, rotate: 25, overflow: 'truncate', width: 55 },
+        axisLine:  { lineStyle: { color: gridColor } },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        type: 'value', name: '%',
+        nameTextStyle: { color: dimColor, fontSize: 9 },
+        axisLabel:  { color: dimColor, fontSize: 9 },
+        splitLine:  { lineStyle: { color: gridColor } },
+        axisLine:   { lineStyle: { color: gridColor } },
+      },
+      series: [{
+        type: 'bar',
+        data: labels.map((l, i) => ({
+          value: values[i],
+          itemStyle: {
+            color: l === highlight ? accent : colors[i % colors.length],
+            opacity: l === highlight ? 1 : 0.78,
+          },
+        })),
+        label: {
+          show: true, position: 'top', color: textColor, fontSize: 8,
+          formatter: p => Number(p.value).toFixed(1) + '%',
+        },
+        emphasis: { focus: 'self' },
+      }],
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: tooltipBg, borderColor: tooltipBorder,
+        textStyle: { color: textColor, fontSize: 11 },
+        formatter: p => `${p[0]?.name}: <b>${Number(p[0]?.value).toFixed(1)}%</b>`,
+      },
+    };
+  }
+
+  // type === 'donut'
+  return {
+    animation: !reducedMotion(),
+    backgroundColor: 'transparent',
+    legend: {
+      orient: 'vertical', right: 0, top: 'middle',
+      textStyle: { color: textColor, fontSize: 9 },
+      itemWidth: 8, itemHeight: 8,
+    },
+    series: [{
+      type: 'pie',
+      radius: ['38%', '68%'],
+      center: ['40%', '50%'],
+      data: labels.map((name, i) => ({
+        name, value: values[i],
+        itemStyle: { color: colors[i % colors.length] },
+      })),
+      label: { show: false },
+      emphasis: { label: { show: true, fontSize: 11, color: textColor } },
+    }],
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: tooltipBg, borderColor: tooltipBorder,
+      textStyle: { color: textColor, fontSize: 11 },
+      formatter: p => `${p.marker}${p.name}: <b>${Number(p.value).toFixed(1)}%</b>`,
+    },
+  };
+}
+
+/**
+ * ageDistributionToEcharts — simple bar chart of participant age distribution.
+ * Plotly go.Bar from ageplot.py (x=age-range labels, y=counts).
+ */
+export function ageDistributionToEcharts(figure) {
+  if (!figure?.data?.length) return null;
+
+  const layout = figure.layout || {};
+  const trace   = figure.data.find(t => t.type === 'bar');
+  if (!trace?.x?.length) return null;
+
+  const textColor = cssVar('--chart-text') || '#e9eefc';
+  const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const gridColor = cssVar('--chart-grid') || 'rgba(255,255,255,0.08)';
+  const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
+  const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
+  const color     = cssVar('--chart-2') || OKABE_ITO[1];
+
+  const titleLines = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const mainTitle  = titleLines[0] || 'Age Distribution';
+  const subTitle   = titleLines.slice(1).join(' ');
+
+  return {
+    animation: !reducedMotion(), animationDuration: 500,
+    backgroundColor: 'transparent',
+    title: {
+      text: mainTitle, subtext: subTitle,
+      left: 'center', top: 8,
+      textStyle:    { color: textColor, fontSize: 15, fontWeight: 'bold' },
+      subtextStyle: { color: dimColor,  fontSize: 11 },
+    },
+    grid: { top: 70, bottom: 60, left: 60, right: 20 },
+    xAxis: {
+      type: 'category', data: trace.x,
+      name: 'Age Range', nameTextStyle: { color: dimColor },
+      axisLabel:  { color: textColor, fontSize: 11, rotate: 30 },
+      axisLine:   { lineStyle: { color: gridColor } },
+      splitLine:  { show: false },
+    },
+    yAxis: {
+      type: 'value', name: 'Count',
+      nameTextStyle: { color: dimColor },
+      axisLabel:  { color: dimColor },
+      splitLine:  { lineStyle: { color: gridColor } },
+      axisLine:   { lineStyle: { color: gridColor } },
+    },
+    series: [{
+      type: 'bar',
+      data: (trace.y || []).map(v => ({ value: v, itemStyle: { color } })),
+      label: { show: true, position: 'top', color: textColor, fontSize: 10 },
+      emphasis: { focus: 'self' },
+    }],
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: tooltipBg, borderColor: tooltipBorder,
+      textStyle: { color: textColor },
+      formatter: p => `Age ${p[0]?.name}: <b>${p[0]?.value}</b>`,
+    },
   };
 }

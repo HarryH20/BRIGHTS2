@@ -1,127 +1,76 @@
 import React, { useEffect, useState } from "react";
-import Plot from "react-plotly.js";
+import ReactECharts from "echarts-for-react";
+import AppErrorBoundary from "../components/ErrorBoundary.jsx";
+import AdminChartWrapper from "../components/AdminChartWrapper.jsx";
+import { linguisticMarkersToEcharts } from "../lib/plotlyToEcharts.js";
 
-export default function LinguisticMarkersPlot({
-  figure: prefetchedFigure,
-}) {
-  const [figure, setFigure] = useState(prefetchedFigure ?? null);
+function LinguisticMarkersPlotInner({ figure: prefetchedFigure }) {
+  const [figure,  setFigure]  = useState(prefetchedFigure ?? null);
   const [loading, setLoading] = useState(prefetchedFigure === undefined);
-  const [error, setError] = useState("");
+  const [error,   setError]   = useState(null);
 
   useEffect(() => {
     if (prefetchedFigure !== undefined) {
       setFigure(prefetchedFigure);
       setLoading(false);
-      return;
+      setError(null);
     }
-
-    let cancelled = false;
-
-    async function loadFigure() {
-      try {
-        setLoading(true);
-        setError("");
-
-        const response = await fetch("/api/admin/linguisticmarkersplot", {
-          credentials: "include",
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to load linguistic markers plot");
-        }
-
-        if (!cancelled) {
-          setFigure(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message || "Failed to load linguistic markers plot");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadFigure();
-
-    return () => {
-      cancelled = true;
-    };
   }, [prefetchedFigure]);
 
-  if (loading) {
-    return (
-      <div style={styles.fallback}>
-        <p style={styles.loadingText}>Loading linguistic markers plot...</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (prefetchedFigure !== undefined) return;
+    setLoading(true);
+    fetch("/api/admin/linguisticmarkersplot", { credentials: "include" })
+      .then(res => { if (!res.ok) throw new Error(`Server error ${res.status}`); return res.json(); })
+      .then(fig  => { setFigure(fig); setError(null); })
+      .catch(err => setError(err.message || "Failed to load linguistic markers chart."))
+      .finally(() => setLoading(false));
+  }, [prefetchedFigure]);
 
-  if (error) {
-    return (
-      <div style={styles.fallback}>
-        <p style={styles.errorText}>
-          Could not load linguistic markers plot: {error}
-        </p>
-      </div>
-    );
-  }
+  const option = figure ? linguisticMarkersToEcharts(figure) : null;
 
-  if (!figure) {
-    return (
-      <div style={styles.fallback}>
-        <p style={styles.loadingText}>No linguistic markers plot data available.</p>
-      </div>
-    );
-  }
+  const trace  = figure?.data?.[0];
+  const srRows = trace?.x
+    ? (trace.x || []).map((coef, i) => ({ feature: trace.y?.[i] ?? i, coef }))
+    : [];
 
-  const layout = {
-    ...figure.layout,
-    autosize: true,
-    width: undefined,
-    height: figure?.layout?.height ?? 700,
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(0,0,0,0)",
-    margin: figure?.layout?.margin ?? { t: 90, l: 220, r: 80, b: 60 },
-  };
+  const chartH = Math.max(400, (srRows.length || 10) * 22 + 120);
 
   return (
-    <Plot
-      data={figure.data || []}
-      layout={layout}
-      config={{
-        responsive: true,
-        displayModeBar: true,
-        displaylogo: false,
-        modeBarButtonsToRemove: ["lasso2d", "select2d"],
-      }}
-      style={{ width: "100%" }}
-      useResizeHandler
-    />
+    <AdminChartWrapper
+      loading={loading}
+      error={error}
+      onRetry={() => { setError(null); setFigure(null); setLoading(true); }}
+      empty={!loading && !error && !option}
+      height={chartH}
+    >
+      {option && (
+        <>
+          <ReactECharts
+            option={option}
+            opts={{ renderer: 'svg' }}
+            style={{ height: chartH, width: '100%' }}
+            notMerge
+          />
+          <table className="sr-only">
+            <caption>Linguistic Markers — Logistic Regression Coefficients</caption>
+            <thead><tr><th>Feature</th><th>Coefficient</th></tr></thead>
+            <tbody>
+              {srRows.map((r, i) => (
+                <tr key={i}><td>{r.feature}</td><td>{Number(r.coef).toFixed(4)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </AdminChartWrapper>
   );
 }
 
-const styles = {
-  fallback: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 220,
-    gap: 12,
-  },
-  loadingText: {
-    color: "#c8d6f0",
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  errorText: {
-    color: "#ff8a8a",
-    fontSize: 14,
-    fontWeight: 600,
-  },
-};
+export default function LinguisticMarkersPlot(props) {
+  return (
+    <AppErrorBoundary context="chart">
+      <LinguisticMarkersPlotInner {...props} />
+    </AppErrorBoundary>
+  );
+}
