@@ -188,6 +188,7 @@ const styles = {
     background: "var(--input-bg)",
     color: "var(--text-primary)",
     outline: "none",
+    fontSize: 16,
   },
   pwRow: {
     display: "grid",
@@ -221,7 +222,7 @@ const styles = {
     padding: "10px 12px",
     borderRadius: 10,
     border: "none",
-    background: "#4f7cff",
+    background: "var(--accent)",
     color: "white",
     fontWeight: 700,
     cursor: "pointer",
@@ -229,7 +230,7 @@ const styles = {
   linkBtn: {
     border: "none",
     background: "transparent",
-    color: "#4f7cff",
+    color: "var(--accent)",
     cursor: "pointer",
     padding: 0,
     textDecoration: "underline",

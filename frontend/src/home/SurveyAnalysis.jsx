@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
+import { BarChart2 } from "lucide-react";
 
 /* ============================
    Constants
@@ -129,8 +130,13 @@ function SurveyAnalysisContent({
       {loading ? (
         <p style={styles.muted}>Loading…</p>
       ) : !filteredGoals || filteredGoals.length === 0 ? (
-        <p style={styles.muted}>No data available for this timepoint.</p>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 16px", gap: 10, textAlign: "center" }}>
+          <BarChart2 size={36} style={{ opacity: 0.3 }} />
+          <div style={{ fontWeight: 700, fontSize: 14 }}>No analysis data yet</div>
+          <p style={{ ...styles.muted, maxWidth: 260, margin: 0 }}>Survey data will appear here after Week 2 is completed.</p>
+        </div>
       ) : (
+        <div style={{ overflowX: "auto" }}>
         <table style={styles.table}>
           <thead>
             <tr>
@@ -161,6 +167,7 @@ function SurveyAnalysisContent({
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       <div style={{ display: "flex", gap: 12, marginTop: 18 }}>

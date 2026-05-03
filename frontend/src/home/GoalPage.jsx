@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 import RadarPlot from "../graphs/RadarPlot.jsx";
+import { AlertCircle } from "lucide-react";
 
 const LIKERT = {
   1: "Strongly disagree", 2: "Disagree", 3: "Somewhat disagree",
@@ -79,7 +80,13 @@ export default function GoalPage({ user, onLogout }) {
         </div>
 
         {loading && <div style={muted}>Loading…</div>}
-        {error && <div style={{ ...muted, color: "#f87171" }}>{error}</div>}
+        {error && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "40px 24px", gap: 12, textAlign: "center" }}>
+            <AlertCircle size={40} style={{ opacity: 0.4, color: "var(--error-color)" }} />
+            <div style={{ fontWeight: 700, color: "var(--error-color)", fontSize: 15 }}>Could not load goal</div>
+            <div style={{ ...muted, maxWidth: 280 }}>{error}</div>
+          </div>
+        )}
 
         {goal && (
           <>
@@ -88,6 +95,7 @@ export default function GoalPage({ user, onLogout }) {
               <div style={{ fontSize: 20, fontWeight: 700 }}>{goal.text}</div>
             </div>
 
+            <div style={{ overflowX: "auto" }}>
             <table style={table}>
               <thead>
                 <tr>
@@ -123,6 +131,7 @@ export default function GoalPage({ user, onLogout }) {
                 })}
               </tbody>
             </table>
+            </div>
           </>
         )}
 
@@ -132,7 +141,7 @@ export default function GoalPage({ user, onLogout }) {
               Goal Traits Radar
             </div>
             <div style={{ borderRadius: 12, border: "1px solid var(--subtle-border)", background: "#0b1220" }}>
-              <RadarPlot goalIndex={goalIndex} />
+              <RadarPlot goalIndex={goalIndex} showHelper />
             </div>
           </div>
         )}

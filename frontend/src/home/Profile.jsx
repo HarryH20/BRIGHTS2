@@ -309,6 +309,7 @@ const styles = {
     border: "1px solid var(--input-border-glass)",
     color: "var(--text-primary)",
     marginBottom: 10,
+    fontSize: 16,
   },
 
   passwordGrid: {

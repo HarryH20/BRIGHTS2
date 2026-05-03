@@ -42,8 +42,8 @@ export default function RosePlot({ figure: prefetchedFigure }) {
         {/* Chart header */}
         <div style={s.header}>
           <div>
-            <div style={s.title}>Goal Progress Overview</div>
-            <div style={s.subtitle}>Your weekly scores across all goals (scale: 1–7)</div>
+            <div style={s.title}>Weekly Goal Progress</div>
+            <div style={s.subtitle}>Progress, Confidence &amp; Importance across all your goals · Scale 1–7</div>
           </div>
           <div style={s.infoWrap}>
             <button
@@ -59,7 +59,7 @@ export default function RosePlot({ figure: prefetchedFigure }) {
             </button>
             {tooltipVisible && (
               <div style={s.tooltip} role="tooltip">
-                Higher scores indicate greater progress, confidence, and importance toward your goal.
+                Each arc represents a survey dimension (Progress, Confidence, Importance). Longer arcs indicate higher scores (max 7). Multiple weeks are overlaid to reveal trends over time.
               </div>
             )}
           </div>

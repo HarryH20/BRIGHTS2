@@ -121,6 +121,8 @@ const styles = {
   modal: {
     width: "100%",
     maxWidth: 480,
+    maxHeight: "90vh",
+    overflowY: "auto",
     padding: 32,
     borderRadius: 20,
     border: "1px solid var(--card-border)",
@@ -183,8 +185,8 @@ const styles = {
     justifyContent: "center",
   },
   dot: {
-    width: 8,
-    height: 8,
+    width: 10,
+    height: 10,
     borderRadius: "50%",
     background: "var(--ghost-border)",
     transition: "background 0.2s",

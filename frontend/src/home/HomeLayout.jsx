@@ -7,9 +7,9 @@ export default function HomeLayout({ user, onLogout, title, rightSlot, children 
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <div style={styles.left}>
+    <div className="home-page" style={styles.page}>
+      <header className="home-header" style={styles.header}>
+        <div className="home-header-left" style={styles.left}>
           <Link to="/profile" style={styles.linkBtn}>
             {user?.avatar_url ? (
               <img
@@ -22,12 +22,12 @@ export default function HomeLayout({ user, onLogout, title, rightSlot, children 
           </Link>
         </div>
 
-        <div style={styles.center}>
+        <div className="home-header-center" style={styles.center}>
           <h1 style={styles.h1}>{title ?? `Welcome, ${name}!`}</h1>
           {rightSlot ? <div style={{ marginTop: 8 }}>{rightSlot}</div> : null}
         </div>
 
-        <div style={styles.right}>
+        <div className="home-header-right" style={styles.right}>
           <button type="button" onClick={toggleTheme} style={styles.themeBtn} aria-label="Toggle theme">
             {theme === "dark" ? "☀ Light" : "🌙 Dark"}
           </button>
@@ -68,10 +68,7 @@ export const styles = {
   header: {
     maxWidth: 1100,
     margin: "0 auto 18px",
-    display: "grid",
-    gridTemplateColumns: "1fr auto 1fr",
     alignItems: "center",
-    gap: 16,
     padding: 18,
     borderRadius: 16,
     border: "1px solid var(--header-border)",
@@ -122,9 +119,9 @@ export const styles = {
   logoutBtn: {
     padding: "10px 14px",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.14)",
-    background: "rgba(255, 80, 80, 0.10)",
-    color: "#ffd1d1",
+    border: "1px solid var(--logout-border)",
+    background: "var(--logout-bg)",
+    color: "var(--logout-color)",
     cursor: "pointer",
     fontWeight: 700,
   },

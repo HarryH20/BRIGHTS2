@@ -6,6 +6,7 @@ import HomeLayout from "./HomeLayout.jsx";
 import OnboardingModal from "./OnboardingModal.jsx";
 import SkeletonCard from "../components/SkeletonCard.jsx";
 import SkeletonGoalCard from "../components/SkeletonGoalCard.jsx";
+import { Target } from "lucide-react";
 
 const ONBOARDED_KEY = "brights2_onboarded";
 
@@ -163,7 +164,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
       <div style={styles.grid} className="grid12">
         {/* Survey prompt */}
         {surveyStatus === "due" && (
-          <section style={{ ...styles.card, gridColumn: "1 / -1", ...styles.surveyBanner }}>
+          <section className="survey-banner-mobile" style={{ ...styles.card, gridColumn: "1 / -1", ...styles.surveyBanner }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>
                 {TP_WEEK[surveyTimepoint] ?? "Weekly"} survey is ready
@@ -246,11 +247,27 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
           ))
         ) : null}
 
+        {goalsLoaded && goals.length === 0 && (
+          <section style={{ ...styles.card, gridColumn: "1 / -1", textAlign: "center", padding: 40 }}>
+            <Target size={40} style={{ opacity: 0.3, marginBottom: 12, color: "var(--text-dim)" }} />
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No goals yet</div>
+            <p style={styles.muted}>Complete your Week 1 survey to set up your goals and start tracking your progress.</p>
+            {surveyStatus === "due" && (
+              <Link to="/survey" style={{ ...styles.primaryBtn, display: "inline-flex", marginTop: 16 }}>
+                Take the Week 1 Survey →
+              </Link>
+            )}
+          </section>
+        )}
+
         {goalsLoaded && goals.map((g, idx) => {
           const latestTp = TP_ORDER.find((tp) =>
             Object.values(g.timepoints?.[tp] || {}).some((v) => v !== null)
           );
           const latestScores = latestTp ? g.timepoints[latestTp] : null;
+          const latestTpIdx = latestTp ? TP_ORDER.indexOf(latestTp) : -1;
+          const prevTp = latestTpIdx >= 0 && latestTpIdx < TP_ORDER.length - 1 ? TP_ORDER[latestTpIdx + 1] : null;
+          const prevScores = prevTp && Object.values(g.timepoints?.[prevTp] || {}).some(v => v !== null) ? g.timepoints[prevTp] : null;
           const shortTitle = g.text.length > 28 ? g.text.slice(0, 28) + "…" : g.text;
 
           return (
@@ -295,6 +312,14 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
                                 }}
                               />
                               <span>{LIKERT[latestScores[q]]}</span>
+                              {prevScores?.[q] != null && (() => {
+                                const d = latestScores[q] - prevScores[q];
+                                return (
+                                  <span style={{ color: d > 0 ? "#4ade80" : d < 0 ? "#f87171" : "#aaaaaa", fontWeight: 700, fontSize: 12 }}>
+                                    {d > 0 ? "▲" : d < 0 ? "▼" : "→"}
+                                  </span>
+                                );
+                              })()}
                             </>
                           ) : (
                             <span style={{ opacity: 0.4 }}>—</span>

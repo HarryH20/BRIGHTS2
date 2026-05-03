@@ -13,7 +13,6 @@ export default defineConfig({
           'vendor-react':   ['react', 'react-dom', 'react-router-dom'],
           'vendor-query':   ['@tanstack/react-query'],
           'vendor-echarts': ['echarts', 'echarts-for-react', 'echarts-wordcloud'],
-          'vendor-plotly':  ['react-plotly.js', 'plotly.js'],
         },
       },
     },

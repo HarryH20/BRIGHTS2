@@ -103,6 +103,13 @@
   --chart-text-dim: var(--text-dim);
 }
 
+/* ── Breakpoints (reference values — CSS custom properties cannot be used in @media queries directly) ── */
+:root {
+  --bp-mobile:  480px;
+  --bp-tablet:  768px;
+  --bp-desktop: 1100px;
+}
+
 /* Light theme overrides for tokens where dark/light differ meaningfully */
 [data-theme="light"] {
   --surface-dark:        #e8edf8;

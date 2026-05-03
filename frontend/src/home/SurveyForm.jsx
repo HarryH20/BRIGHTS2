@@ -223,8 +223,8 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
   if (state === "complete") {
     return (
       <HomeLayout user={user} onLogout={onLogout} title="Weekly Survey">
-        <div style={{ ...s.card, textAlign: "center" }}>
-          <div style={s.bigIcon}>✓</div>
+        <div style={{ ...s.card, textAlign: "center" }} className="success-card">
+          <div className="success-icon" style={s.bigIcon}>✓</div>
           <h2 style={{ marginTop: 12 }}>All surveys complete!</h2>
           <p style={s.muted}>You have finished all 6 timepoints. Thank you for participating.</p>
           <Link to="/dashboard" style={s.primaryBtn}>Back to Dashboard</Link>
@@ -261,8 +261,8 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
       : null;
     return (
       <HomeLayout user={user} onLogout={onLogout} title="Weekly Survey">
-        <div style={{ ...s.card, textAlign: "center" }}>
-          <div style={s.bigIcon}>✓</div>
+        <div style={{ ...s.card, textAlign: "center" }} className="success-card">
+          <div className="success-icon" style={s.bigIcon}>✓</div>
           <h2 style={{ marginTop: 12 }}>
             {TP_LABELS[surveyData.timepoint]} submitted!
           </h2>
@@ -323,6 +323,10 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
         <div style={s.progressTrack}>
           <div style={{ ...s.progressFill, width: `${progress}%` }} />
         </div>
+        <div style={s.progressMeta}>
+          {answered} of {total} questions answered
+          {total - answered > 0 && <> · ~{Math.ceil((total - answered) * 0.5)} min to go</>}
+        </div>
 
         {/* Goal tabs */}
         <div style={s.tabs}>
@@ -367,11 +371,11 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
           </div>
 
           {submitError && (
-            <div style={{ color: "#f87171", fontSize: 13, marginTop: 8 }}>{submitError}</div>
+            <div style={s.errorBanner}>⚠ {submitError}</div>
           )}
 
           {/* Navigation */}
-          <div style={s.navRow}>
+          <div className="survey-nav-row" style={s.navRow}>
             <button
               style={s.btn}
               disabled={activeGoal === 1}
@@ -386,7 +390,7 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
                 disabled={isSubmitting}
                 onClick={handleSubmit}
               >
-                {isSubmitting ? "Submitting…" : "Submit Survey"}
+                {isSubmitting ? <><span style={s.spinnerInline} />Submitting…</> : "Submit Survey"}
               </button>
             ) : (
               <button style={s.primaryBtn} onClick={() => setActiveGoal((g) => g + 1)}>
@@ -405,16 +409,19 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
 
 function QuestionRow({ question, value, onChange }) {
   if (question.scale_type === "goal_text") {
+    const charCount = (value || "").length;
     return (
       <div style={s.qRow}>
         <label style={s.qLabel}>{question.question_text}</label>
         <textarea
           style={s.textarea}
           rows={3}
+          maxLength={500}
           placeholder="Describe your goal…"
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
+        <div style={s.charCounter}>{charCount} / 500</div>
       </div>
     );
   }
@@ -426,24 +433,26 @@ function QuestionRow({ question, value, onChange }) {
         <span style={s.qNum}>Q{question.question_number}</span>
         {question.question_text}
       </label>
-      <div style={s.likertRow}>
-        <span style={s.likertEndLabel}>Strongly<br />Disagree</span>
-        <div style={s.likertButtons}>
+      <div className="likert-row" style={s.likertRow}>
+        <span className="likert-end-label" style={s.likertEndLabel}>Strongly<br />Disagree</span>
+        <div className="likert-buttons-inner" style={s.likertButtons}>
           {[1, 2, 3, 4, 5, 6, 7].map((n) => (
             <button
               key={n}
               type="button"
+              className="likert-btn"
               onClick={() => onChange(n)}
               style={{
                 ...s.likertBtn,
                 ...(Number(value) === n ? s.likertBtnSelected : {}),
               }}
             >
-              {n}
+              <span className="likert-btn-num">{n}</span>
+              <span className="likert-btn-label">{LIKERT7_LABELS[n].replace('\n', ' ')}</span>
             </button>
           ))}
         </div>
-        <span style={s.likertEndLabel}>Strongly<br />Agree</span>
+        <span className="likert-end-label" style={s.likertEndLabel}>Strongly<br />Agree</span>
       </div>
     </div>
   );
@@ -456,13 +465,16 @@ const s = {
 
   progressTrack: {
     height: 6, borderRadius: 99,
-    background: "rgba(255,255,255,0.08)",
+    background: "var(--progress-track-bg)",
     overflow: "hidden",
   },
   progressFill: {
     height: "100%", borderRadius: 99,
-    background: "linear-gradient(90deg, #4f7cff, #7c5cff)",
+    background: "var(--progress-fill)",
     transition: "width 0.3s ease",
+  },
+  progressMeta: {
+    fontSize: 12, opacity: 0.6, textAlign: "center", letterSpacing: "0.01em",
   },
 
   tabs: { display: "flex", gap: 8, flexWrap: "wrap" },
@@ -508,11 +520,12 @@ const s = {
   likertRow: { display: "flex", alignItems: "center", gap: 10 },
   likertButtons: { display: "flex", gap: 6, flex: 1, justifyContent: "center" },
   likertBtn: {
-    width: 38, height: 38, borderRadius: 8, fontSize: 13, fontWeight: 700,
+    width: 38, minHeight: 44, borderRadius: 8, fontSize: 13, fontWeight: 700,
     border: "1px solid var(--ghost-border)",
     background: "var(--input-bg-glass)",
     color: "var(--ghost-color)",
     cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
     transition: "background 0.15s, border-color 0.15s, color 0.15s",
   },
   likertBtnSelected: {
@@ -582,6 +595,27 @@ const s = {
     border: "3px solid rgba(79,124,255,0.2)",
     borderTop: "3px solid #4f7cff",
     animation: "spin 0.8s linear infinite",
+  },
+  spinnerInline: {
+    display: "inline-block",
+    width: 14, height: 14, borderRadius: "50%",
+    border: "2px solid rgba(255,255,255,0.3)",
+    borderTop: "2px solid #fff",
+    animation: "spin 0.7s linear infinite",
+    verticalAlign: "middle",
+    marginRight: 6,
+  },
+  errorBanner: {
+    padding: "10px 14px",
+    borderRadius: 10,
+    background: "var(--error-bg)",
+    border: "1px solid var(--error-border)",
+    color: "var(--error-color)",
+    fontSize: 13,
+    marginTop: 8,
+  },
+  charCounter: {
+    fontSize: 12, opacity: 0.5, textAlign: "right", marginTop: 4,
   },
   muted: { opacity: 0.7, fontSize: 14, lineHeight: 1.6, marginBottom: 20 },
   bigIcon: { fontSize: 48, lineHeight: 1 },
