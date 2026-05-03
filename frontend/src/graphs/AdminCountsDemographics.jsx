@@ -41,13 +41,16 @@ function AdminCountsDemographicsInner({ figure: prefetchedFigure, initialDemoLab
   const option = figure ? countsDemographicsToEcharts(figure) : null;
 
   const filterSlot = (
-    <select
-      value={demoLabel}
-      onChange={e => setDemoLabel(e.target.value)}
-      style={sel}
-    >
-      {DEMO_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
-    </select>
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12, fontWeight: 700, color: 'var(--text-dim)' }}>
+      Demographic Category:
+      <select
+        value={demoLabel}
+        onChange={e => setDemoLabel(e.target.value)}
+        style={sel}
+      >
+        {DEMO_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+      </select>
+    </label>
   );
 
   return (

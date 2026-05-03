@@ -413,7 +413,7 @@ export function divergingBarToEcharts(figure) {
       gridIndex: i,
       type: 'category',
       data: yLabels,
-      axisLabel: { color: textColor, fontSize: 12, width: 160, overflow: 'truncate' },
+      axisLabel: { color: textColor, fontSize: 12, width: 200, overflow: 'truncate', tooltip: { show: true } },
       axisLine:  { lineStyle: { color: gridColor } },
       splitLine: { show: false },
     });
@@ -421,7 +421,7 @@ export function divergingBarToEcharts(figure) {
     const weekLabel = weekAnnotations[i] ? stripHtml(weekAnnotations[i].text) : `Week ${i + 1}`;
     graphic.push({
       type: 'text', left: '50%', top: topPx - 24,
-      style: { text: weekLabel, textAlign: 'center', fill: '#7b9eff', fontSize: 14, fontWeight: 'bold' },
+      style: { text: weekLabel, textAlign: 'center', fill: cssVar('--chart-2') || '#56B4E9', fontSize: 14, fontWeight: 'bold' },
     });
 
     barTraces.forEach((trace, ti) => {
@@ -631,64 +631,85 @@ export function countsDemographicsToEcharts(figure) {
 }
 
 /**
- * attritionFunnelToEcharts — funnel chart of participant retention across weeks.
+ * attritionFunnelToEcharts — horizontal bar chart of participant retention across weeks.
  * Plotly go.Funnel trace from admin_attrition_funnel.py (y=labels, x=counts).
+ * Displayed as a horizontal bar chart (funnel shape is misleading for retention data).
  */
 export function attritionFunnelToEcharts(figure) {
   if (!figure?.data?.length) return null;
 
-  const layout = figure.layout || {};
-  const trace   = figure.data.find(t => t.type === 'funnel') || figure.data[0];
+  const trace = figure.data.find(t => t.type === 'funnel') || figure.data[0];
   if (!trace) return null;
 
   const textColor = cssVar('--chart-text') || '#e9eefc';
   const dimColor  = cssVar('--chart-text-dim') || 'rgba(233,238,252,0.7)';
+  const gridColor = cssVar('--chart-grid') || 'rgba(255,255,255,0.08)';
   const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
   const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
   const colors    = OKABE_ITO.map((fb, i) => cssVar(`--chart-${i + 1}`) || fb);
-
-  const titleLines = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
-  const mainTitle  = titleLines[0] || 'Attrition Funnel';
-  const subTitle   = titleLines.slice(1).join(' ');
 
   const labels = trace.y || [];
   const counts = trace.x || [];
   if (!labels.length) return null;
 
+  const baseline = counts[0] || 1;
+
   return {
     animation: !reducedMotion(), animationDuration: 500,
     backgroundColor: 'transparent',
     title: {
-      text: mainTitle, subtext: subTitle,
+      text: 'Participant Retention Across the Study',
+      subtext: 'Number of participants who completed each weekly survey',
       left: 'center', top: 8,
       textStyle:    { color: textColor, fontSize: 15, fontWeight: 'bold' },
       subtextStyle: { color: dimColor,  fontSize: 11 },
     },
-    legend: {
-      data: labels, top: 50, left: 'center',
-      textStyle: { color: textColor, fontSize: 10 },
+    grid: { left: '18%', right: '12%', top: 80, bottom: 40 },
+    xAxis: {
+      type: 'value',
+      name: 'Participants',
+      nameTextStyle: { color: dimColor, fontSize: 11 },
+      axisLabel:  { color: dimColor },
+      splitLine:  { lineStyle: { color: gridColor } },
+      axisLine:   { lineStyle: { color: gridColor } },
+    },
+    yAxis: {
+      type: 'category',
+      data: labels,
+      axisLabel:  { color: textColor, fontSize: 12 },
+      axisLine:   { lineStyle: { color: gridColor } },
+      splitLine:  { show: false },
     },
     series: [{
-      type: 'funnel',
-      top: 90, bottom: 20, left: '10%', width: '80%',
-      sort: 'none', gap: 2,
-      label: {
-        show: true, position: 'inside', color: '#fff', fontSize: 12,
-        formatter: p => `${p.name}: ${p.value}`,
-      },
-      labelLine: { show: false },
-      itemStyle: { borderColor: 'rgba(255,255,255,0.15)', borderWidth: 1 },
-      data: labels.map((name, i) => ({
-        name, value: counts[i],
+      type: 'bar',
+      data: counts.map((v, i) => ({
+        value: v,
         itemStyle: { color: colors[i % colors.length] },
       })),
-      emphasis: { label: { show: true, fontSize: 14 } },
+      label: {
+        show: true, position: 'right', color: textColor,
+        formatter: p => String(p.value),
+      },
+      emphasis: { focus: 'self' },
+      markLine: {
+        silent: true, symbol: 'none',
+        lineStyle: { color: textColor, type: 'dashed', width: 1, opacity: 0.4 },
+        data: [{ xAxis: baseline }],
+        label: {
+          show: true, position: 'insideEndTop',
+          formatter: `Started: ${baseline} participants`,
+          color: dimColor, fontSize: 10,
+        },
+      },
     }],
     tooltip: {
       trigger: 'item',
       backgroundColor: tooltipBg, borderColor: tooltipBorder,
       textStyle: { color: textColor },
-      formatter: p => `${p.marker}${p.name}: <b>${p.value}</b>`,
+      formatter: p => {
+        const pct = (p.value / baseline * 100).toFixed(1);
+        return `${p.name}: <b>${p.value}</b> participants<br/>${pct}% of Week 1 total`;
+      },
     },
   };
 }
@@ -713,7 +734,6 @@ export function linguisticMarkersToEcharts(figure) {
 
   const titleLines = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
   const mainTitle  = titleLines[0] || 'Linguistic Markers';
-  const subTitle   = titleLines.slice(1).join(' ') || 'Positive = High Progress; Negative = Low Progress';
 
   const coefs    = trace.x;
   const features = trace.y;
@@ -723,15 +743,19 @@ export function linguisticMarkersToEcharts(figure) {
     animation: !reducedMotion(), animationDuration: 500,
     backgroundColor: 'transparent',
     title: {
-      text: mainTitle, subtext: subTitle,
+      text: mainTitle,
+      subtext: 'Words most strongly associated with higher or lower weekly goal progress scores (logistic regression)',
       left: 'center', top: 8,
       textStyle:    { color: textColor, fontSize: 15, fontWeight: 'bold' },
       subtextStyle: { color: dimColor,  fontSize: 11 },
     },
-    grid: { top: 80, bottom: 40, left: '22%', right: '4%' },
+    grid: { top: 80, bottom: 56, left: '22%', right: '4%' },
     xAxis: {
-      type: 'value', name: 'Coefficient',
-      nameTextStyle: { color: dimColor },
+      type: 'value',
+      name: '← Low Progress   |   High Progress →',
+      nameLocation: 'center',
+      nameGap: 28,
+      nameTextStyle: { color: dimColor, fontSize: 11 },
       axisLabel:  { color: dimColor, fontSize: 10 },
       splitLine:  { lineStyle: { color: gridColor } },
       axisLine:   { lineStyle: { color: gridColor } },
@@ -758,14 +782,23 @@ export function linguisticMarkersToEcharts(figure) {
         silent: true, symbol: 'none',
         lineStyle: { color: textColor, type: 'dashed', width: 1, opacity: 0.5 },
         data: [{ xAxis: 0 }],
-        label: { show: false },
+        label: {
+          show: true, position: 'insideEndTop',
+          formatter: 'Neutral',
+          color: dimColor, fontSize: 10,
+        },
       },
     }],
     tooltip: {
       trigger: 'item',
       backgroundColor: tooltipBg, borderColor: tooltipBorder,
       textStyle: { color: textColor },
-      formatter: p => `${p.value[1]}<br/>Coefficient: <b>${Number(p.value[0]).toFixed(4)}</b>`,
+      formatter: p => {
+        const coef = Number(p.value[0]);
+        const word = p.value[1];
+        const dir  = coef >= 0 ? 'High progress' : 'Low progress';
+        return `<b>${word}</b><br/>${dir} indicator<br/>Strength: ${Math.abs(coef).toFixed(3)}`;
+      },
     },
   };
 }
@@ -791,6 +824,16 @@ export function wordCloudToEcharts(figure) {
   return null;
 }
 
+function cleanSankeyLabel(raw) {
+  if (!raw) return raw;
+  return raw
+    .replace(/\bT(\d)\b/g, (_, n) => `Week ${n}`)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/\s+\d+$/, '')
+    .trim();
+}
+
 /**
  * alluvialToEcharts — converts a single Plotly Sankey figure dict to ECharts sankey.
  * Called once per question figure (caller iterates over the response structure).
@@ -807,10 +850,10 @@ export function alluvialToEcharts(figure) {
   const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
   const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
 
-  const mainTitle = 'Participant Flow Across Study Timepoints';
-  const subTitle  = 'Sankey diagram showing transitions between groups (T1–T6)';
+  const mainTitle = 'Participant Flow Between Groups';
+  const subTitle  = 'How participants moved between high and low progress groups across the study weeks';
 
-  const nodeLabels = trace.node?.label  || [];
+  const rawLabels  = trace.node?.label  || [];
   const nodeColors = trace.node?.color  || [];
   const srcArr     = trace.link?.source || [];
   const tgtArr     = trace.link?.target || [];
@@ -819,15 +862,17 @@ export function alluvialToEcharts(figure) {
 
   if (!srcArr.length) return null;
 
-  const nodes = nodeLabels.map((name, i) => ({
+  const cleanLabels = rawLabels.map(cleanSankeyLabel);
+
+  const nodes = cleanLabels.map((name, i) => ({
     name,
     itemStyle: { color: nodeColors[i] || '#999' },
     label: { color: textColor, fontSize: 10 },
   }));
 
   const links = srcArr.map((s, i) => ({
-    source:    nodeLabels[s],
-    target:    nodeLabels[tgtArr[i]],
+    source:    cleanLabels[s],
+    target:    cleanLabels[tgtArr[i]],
     value:     valArr[i],
     lineStyle: { color: colArr[i] || 'rgba(150,150,150,0.3)' },
   }));

@@ -76,6 +76,8 @@ function AdminAttritionFunnelInner() {
       error={error}
       onRetry={() => { setError(null); setFigure(null); setLoading(true); }}
       empty={!loading && !error && !option}
+      title="Participant Retention by Week"
+      subtitle="Drop-off from Week 1 through Week 6"
       filterSlot={filterSlot}
       height={440}
     >

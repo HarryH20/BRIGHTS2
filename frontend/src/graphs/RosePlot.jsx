@@ -43,7 +43,7 @@ export default function RosePlot({ figure: prefetchedFigure }) {
         <div style={s.header}>
           <div>
             <div style={s.title}>Weekly Goal Progress</div>
-            <div style={s.subtitle}>Progress, Confidence &amp; Importance across all your goals · Scale 1–7</div>
+            <div style={s.subtitle}>Each petal = one goal × one week. Longer petals = higher scores (scale 1–7). Colors distinguish your three goals.</div>
           </div>
           <div style={s.infoWrap}>
             <button
@@ -59,7 +59,7 @@ export default function RosePlot({ figure: prefetchedFigure }) {
             </button>
             {tooltipVisible && (
               <div style={s.tooltip} role="tooltip">
-                Each arc represents a survey dimension (Progress, Confidence, Importance). Longer arcs indicate higher scores (max 7). Multiple weeks are overlaid to reveal trends over time.
+                Scores reflect how much progress, confidence, and importance you felt toward each goal that week. All three measures are averaged into one score.
               </div>
             )}
           </div>

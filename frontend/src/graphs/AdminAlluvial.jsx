@@ -66,8 +66,8 @@ function AdminAlluvialInner({ figure: prefetchedFigure }) {
     <div>
       <div style={hdr}>
         <div>
-          <h2 style={titleSt}>Alluvial Chart</h2>
-          <p style={subtitleSt}>Compare response flow across transitions.</p>
+          <h2 style={titleSt}>Participant Flow Between Groups</h2>
+          <p style={subtitleSt}>How participants moved between high and low progress groups across the study weeks</p>
         </div>
         {transitions.length > 0 && (
           <label style={lbl}>

@@ -20,6 +20,7 @@ export default function AdminChartWrapper({
   onRetry,
   empty,
   title,
+  subtitle,
   filterSlot,
   height = 400,
   children,
@@ -34,6 +35,7 @@ export default function AdminChartWrapper({
   return (
     <div style={s.card}>
       {title && <h3 style={s.title}>{title}</h3>}
+      {subtitle && <p style={s.subtitle}>{subtitle}</p>}
 
       {filterSlot && <div style={s.filters}>{filterSlot}</div>}
 
@@ -82,10 +84,16 @@ const s = {
     marginBottom: 24,
   },
   title: {
-    margin: '0 0 12px',
+    margin: '0 0 4px',
     fontSize: 16,
     fontWeight: 700,
     color: 'var(--text-primary)',
+  },
+  subtitle: {
+    margin: '0 0 12px',
+    fontSize: 12,
+    color: 'var(--text-dim)',
+    lineHeight: 1.45,
   },
   filters: {
     marginBottom: 14,

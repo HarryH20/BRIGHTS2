@@ -92,13 +92,13 @@ function AdminDemographicBarChartInner({
         </select>
       </label>
       <label style={lbl}>
-        Group
+        Subgroup
         <select value={groupVal} onChange={e => setGroupVal(e.target.value)} style={sel}>
           {groupOptions.map(g => <option key={g} value={g}>{g}</option>)}
         </select>
       </label>
       <label style={lbl}>
-        Week
+        Survey Week
         <select value={timepoint} onChange={e => setTimepoint(Number(e.target.value))} style={sel}>
           {TIMEPOINT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>

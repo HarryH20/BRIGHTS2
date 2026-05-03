@@ -42,6 +42,8 @@ function LinguisticMarkersPlotInner({ figure: prefetchedFigure }) {
       error={error}
       onRetry={() => { setError(null); setFigure(null); setLoading(true); }}
       empty={!loading && !error && !option}
+      title="Words Associated with Goal Progress"
+      subtitle="Linguistic markers from participant weekly reflections"
       height={chartH}
     >
       {option && (

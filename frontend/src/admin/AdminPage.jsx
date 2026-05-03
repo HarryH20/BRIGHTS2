@@ -507,22 +507,22 @@ function DemographicsTab() {
   return (
     <div style={styles.tabContent}>
       <AdminChartSection
-        title="Likert Distribution"
-        subtitle="Compare a selected demographic subgroup against the full sample."
+        title="Survey Response Distribution by Demographic"
+        subtitle="How a selected subgroup responded compared to the full sample across Likert scale questions"
       >
         <AdminDemographicBarChart />
       </AdminChartSection>
 
       <AdminChartSection
-        title="Participant Counts"
-        subtitle="Unique participant counts across demographic categories."
+        title="Who Is in the Study"
+        subtitle="Number of participants in each demographic category"
       >
         <AdminCountsDemographics />
       </AdminChartSection>
 
       <AdminChartSection
-        title="Participant Attrition"
-        subtitle="Retention drop-off across timepoints by demographic group."
+        title="Who Stayed and Who Left"
+        subtitle="Participation rate across all six survey weeks, broken down by demographic group"
       >
         <AdminAttritionFunnel />
       </AdminChartSection>
@@ -536,15 +536,15 @@ function LinguisticsTab() {
   return (
     <div style={styles.tabContent}>
       <AdminChartSection
-        title="Linguistic Markers"
-        subtitle="Words and phrases associated with higher vs. lower goal progress across Weeks 2–6."
+        title="Words That Predict Goal Progress"
+        subtitle="Language patterns from weekly reflections that correlate with higher or lower goal scores"
       >
         <LinguisticMarkersPlot />
       </AdminChartSection>
 
       <AdminChartSection
-        title="Word Clouds"
-        subtitle="Distinctive reflection words used by higher and lower goal progress groups."
+        title="How High and Low Progress Groups Write Differently"
+        subtitle="Distinctive words from participant reflections — shared common words removed"
       >
         <LinguisticMarkersWordCloud />
       </AdminChartSection>
@@ -558,8 +558,8 @@ function AlluvialTab() {
   return (
     <div style={styles.tabContent}>
       <AdminChartSection
-        title="Alluvial Chart"
-        subtitle="Flow-based admin visualization across categories or stages."
+        title="Participant Flow Between Progress Groups"
+        subtitle="How participants moved between high and low goal progress groups across study weeks"
       >
         <AdminAlluvial />
       </AdminChartSection>

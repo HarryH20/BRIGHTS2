@@ -34,20 +34,42 @@ function LinguisticMarkersWordCloudInner({ figure: prefetchedFigure }) {
       error={error}
       onRetry={() => { setError(null); setFigure(null); setLoading(true); }}
       empty={!loading && !error && !result}
+      title="Reflection Word Patterns"
+      subtitle="Distinctive words from participant weekly reflections"
       height={420}
     >
       {result?._isImage && (
         <div>
-          {result.subtitle && (
-            <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-dim)', textAlign: 'center' }}>
-              {result.subtitle}
-            </p>
-          )}
+          <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 2 }}>
+                Reflection Word Patterns
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                Words used by high-progress participants (green) vs low-progress participants (red)
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 11 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: '#2ecc71', display: 'inline-block' }} />
+                <span style={{ color: 'var(--text-dim)' }}>High progress</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: '#e74c3c', display: 'inline-block' }} />
+                <span style={{ color: 'var(--text-dim)' }}>Low progress</span>
+              </span>
+            </div>
+          </div>
           <img
             src={result.imageSource}
             alt="Word cloud comparing high-progress and low-progress reflections"
             style={{ width: '100%', borderRadius: 10, display: 'block' }}
           />
+          {result.subtitle && (
+            <p style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)', textAlign: 'center', fontStyle: 'italic' }}>
+              {result.subtitle}
+            </p>
+          )}
         </div>
       )}
     </AdminChartWrapper>

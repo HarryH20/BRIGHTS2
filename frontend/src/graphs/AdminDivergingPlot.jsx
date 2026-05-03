@@ -39,6 +39,8 @@ function AdminDivergingPlotInner({ figure: prefetchedFigure }) {
       error={error}
       onRetry={() => { setError(null); setFigure(null); setLoading(true); }}
       empty={!loading && !error && !echartsOption}
+      title="Goal-Related Belief Changes by Week"
+      subtitle="Percentage of participants who agree or disagree with each statement, compared to neutral. Blue = agreement, Orange = disagreement."
       height={totalH}
     >
       {echartsOption && (
