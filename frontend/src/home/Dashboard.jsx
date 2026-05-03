@@ -2,9 +2,10 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import RosePlot from "../graphs/RosePlot.jsx";
 import RadarPlot from "../graphs/RadarPlot.jsx";
-import LoadingScreen from "./LoadingScreen.jsx";
 import HomeLayout from "./HomeLayout.jsx";
 import OnboardingModal from "./OnboardingModal.jsx";
+import SkeletonCard from "../components/SkeletonCard.jsx";
+import SkeletonGoalCard from "../components/SkeletonGoalCard.jsx";
 
 const ONBOARDED_KEY = "brights2_onboarded";
 
@@ -43,6 +44,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
   const [filteredRoseFigure, setFilteredRoseFigure] = useState(chartCache?.loaded ? chartCache.roseFigure : null);
   const [radarFigures, setRadarFigures] = useState(chartCache?.loaded ? chartCache.radarFigures : {});
   const [ready, setReady] = useState(chartCache?.loaded ?? false);
+  const [goalsLoaded, setGoalsLoaded] = useState(chartCache?.loaded ?? false);
   const [loadingStatus, setLoadingStatus] = useState("Loading your goals...");
   const [surveyStatus, setSurveyStatus] = useState(null);   // "due" | "locked" | "complete" | null
   const [surveyTimepoint, setSurveyTimepoint] = useState(null);
@@ -90,6 +92,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
       setGoals(fetchedGoals);
       setRoseFigure(rose);
       setFilteredRoseFigure(rose);
+      setGoalsLoaded(true);
 
       if (fetchedGoals.length === 0) {
         setChartCache?.({ goals: [], roseFigure: rose, radarFigures: {}, loaded: true });
@@ -139,7 +142,6 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
 
   const colSpan = goals.length <= 1 ? 12 : goals.length === 2 ? 6 : 4;
 
-  if (!ready) return <LoadingScreen status={loadingStatus} />;
 
   return (
     <>
@@ -235,8 +237,16 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
           </section>
         )}
 
-        {/* Goal Cards */}
-        {goals.map((g, idx) => {
+        {/* Goal Cards — show skeletons while goals data is loading */}
+        {!goalsLoaded ? (
+          [0, 1, 2].map(i => (
+            <section key={i} style={{ ...styles.card, gridColumn: `span 4` }}>
+              <SkeletonGoalCard />
+            </section>
+          ))
+        ) : null}
+
+        {goalsLoaded && goals.map((g, idx) => {
           const latestTp = TP_ORDER.find((tp) =>
             Object.values(g.timepoints?.[tp] || {}).some((v) => v !== null)
           );
@@ -338,7 +348,11 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
 
           <div style={styles.overviewBox}>
             <div style={{ width: "100%" }}>
-              <RosePlot figure={filteredRoseFigure || roseFigure} />
+              {!filteredRoseFigure && !goalsLoaded ? (
+                <SkeletonCard height={380} label="Loading overview chart..." />
+              ) : (
+                <RosePlot figure={filteredRoseFigure || roseFigure} />
+              )}
             </div>
           </div>
         </section>

@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from "react";
-import Plot from "react-plotly.js";
+import ReactECharts from "echarts-for-react";
+import { BarChart2 } from "lucide-react";
+import { rosePlotToEcharts } from "../lib/plotlyToEcharts.js";
+import AppErrorBoundary from "../components/ErrorBoundary.jsx";
 
 export default function RosePlot({ figure: prefetchedFigure }) {
   const [figure, setFigure] = useState(prefetchedFigure ?? null);
   const [error, setError] = useState(null);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
 
   useEffect(() => {
     setFigure(prefetchedFigure ?? null);
@@ -12,166 +16,182 @@ export default function RosePlot({ figure: prefetchedFigure }) {
 
   useEffect(() => {
     if (prefetchedFigure !== undefined) return;
-
     fetch("/api/visualizations/roseplot", { credentials: "include" })
-      .then((res) => {
+      .then(res => {
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         return res.json();
       })
-      .then((fig) => {
-        setFigure(fig);
-        setError(null);
-      })
-      .catch((err) => {
-        setError(err.message || "Failed to load rose plot.");
-      });
+      .then(fig => { setFigure(fig); setError(null); })
+      .catch(err => setError(err.message || "Failed to load rose plot."));
   }, [prefetchedFigure]);
+
+  const option = figure ? rosePlotToEcharts(figure) : null;
+  const tableData = rosePlotToEcharts._lastTableData;
 
   if (error) {
     return (
-      <div style={styles.fallback}>
-        <p style={styles.errorText}>Could not load rose plot: {error}</p>
-        <p style={styles.hint}>
-          Make sure the Flask backend is running on port 5000.
-        </p>
+      <div style={s.container}>
+        <p style={s.errorText}>Could not load chart: {error}</p>
       </div>
     );
   }
-
-  if (!figure) {
-    return (
-      <div style={styles.fallback}>
-        <div style={styles.spinner} />
-        <p style={styles.loadingText}>Loading rose plot...</p>
-      </div>
-    );
-  }
-
-  if (!figure.data || figure.data.length === 0) {
-    return (
-      <div style={styles.fallback}>
-        <p style={styles.noDataTitle}>No survey data yet</p>
-        <p style={styles.noDataHint}>
-          Complete your Week 2 survey to start seeing your goal progression here.
-        </p>
-      </div>
-    );
-  }
-
-  const baseLayout = figure.layout || {};
-
-  const adjustedAnnotations = (baseLayout.annotations || []).map((ann) => ({
-    ...ann,
-    y: typeof ann.y === "number" ? ann.y + 0.06 : ann.y,
-    yanchor: "bottom",
-  }));
-
-  const adjustedLayout = { ...baseLayout };
-
-  Object.keys(baseLayout).forEach((key) => {
-    if (key === "polar" || /^polar\d+$/.test(key)) {
-      const polarConfig = baseLayout[key] || {};
-      const domain = polarConfig.domain || {};
-      const x = Array.isArray(domain.x) ? domain.x : [0, 1];
-      const y = Array.isArray(domain.y) ? domain.y : [0, 1];
-
-      adjustedLayout[key] = {
-        ...polarConfig,
-        domain: {
-          x: [
-            Math.max(0, x[0] + 0.03),
-            Math.min(1, x[1] - 0.03),
-          ],
-          y,
-        },
-        angularaxis: {
-          ...polarConfig.angularaxis,
-          tickfont: {
-            ...(polarConfig.angularaxis?.tickfont || {}),
-            size: 11,
-          },
-        },
-      };
-    }
-  });
-
-  const layout = {
-    ...adjustedLayout,
-    annotations: adjustedAnnotations,
-    autosize: true,
-    width: undefined,
-    height: 2000,
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(0,0,0,0)",
-    margin: {
-      t: 140,
-      l: 60,
-      r: 60,
-      b: 40,
-    },
-  };
 
   return (
-    <Plot
-      data={figure.data}
-      layout={layout}
-      config={{
-        responsive: true,
-        displayModeBar: true,
-        displaylogo: false,
-        modeBarButtonsToRemove: ["lasso2d", "select2d"],
-      }}
-      style={{ width: "100%", minHeight: 900 }}
-      useResizeHandler
-    />
+    <AppErrorBoundary context="chart">
+      <div style={s.container}>
+        {/* Chart header */}
+        <div style={s.header}>
+          <div>
+            <div style={s.title}>Goal Progress Overview</div>
+            <div style={s.subtitle}>Your weekly scores across all goals (scale: 1–7)</div>
+          </div>
+          <div style={s.infoWrap}>
+            <button
+              type="button"
+              style={s.infoBtn}
+              aria-label="Chart information"
+              onMouseEnter={() => setTooltipVisible(true)}
+              onMouseLeave={() => setTooltipVisible(false)}
+              onFocus={() => setTooltipVisible(true)}
+              onBlur={() => setTooltipVisible(false)}
+            >
+              ⓘ
+            </button>
+            {tooltipVisible && (
+              <div style={s.tooltip} role="tooltip">
+                Higher scores indicate greater progress, confidence, and importance toward your goal.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {!option ? (
+          <div style={s.emptyState}>
+            <BarChart2 size={36} style={{ opacity: 0.3, marginBottom: 12 }} />
+            <div style={s.emptyTitle}>No chart data yet</div>
+            <p style={s.emptyHint}>
+              Complete your weekly surveys to see your progress visualized here.
+            </p>
+          </div>
+        ) : (
+          <>
+            <ReactECharts
+              option={option}
+              style={{ width: "100%", height: "380px" }}
+              opts={{ renderer: "svg" }}
+            />
+
+            {/* Screen-reader data table fallback */}
+            {tableData && (
+              <table className="sr-only" aria-label="Goal progress data table">
+                <thead>
+                  <tr>
+                    <th scope="col">Week</th>
+                    {tableData.questions.map(q => (
+                      <th key={q} scope="col">{q}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableData.weeks.map(w => (
+                    <tr key={w}>
+                      <th scope="row">Week {w}</th>
+                      {tableData.questions.map(q => {
+                        const cell = tableData.panelData.find(d => d.week === w && d.question === q);
+                        return <td key={q}>{cell ? `${cell.score} / 7` : "—"}</td>;
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
+    </AppErrorBoundary>
   );
 }
 
-const styles = {
-  fallback: {
+const s = {
+  container: {
+    borderRadius: 16,
+    border: "1px solid var(--card-border)",
+    background: "var(--card-bg)",
+    padding: 16,
+  },
+  header: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 4,
+  },
+  title: {
+    fontWeight: 800,
+    fontSize: 15,
+    color: "var(--text-primary)",
+    marginBottom: 2,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: "var(--text-dim)",
+    lineHeight: 1.4,
+  },
+  infoWrap: {
+    position: "relative",
+    flexShrink: 0,
+  },
+  infoBtn: {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    color: "var(--text-dim)",
+    fontSize: 16,
+    padding: "2px 4px",
+    lineHeight: 1,
+  },
+  tooltip: {
+    position: "absolute",
+    top: "calc(100% + 6px)",
+    right: 0,
+    width: 240,
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid var(--card-border)",
+    background: "var(--card-bg)",
+    backdropFilter: "blur(8px)",
+    color: "var(--text-primary)",
+    fontSize: 12,
+    lineHeight: 1.5,
+    zIndex: 10,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+  },
+  emptyState: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 300,
-    gap: 12,
+    minHeight: 260,
+    color: "var(--text-dim)",
+    textAlign: "center",
+    padding: 24,
   },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: "3px solid rgba(79,124,255,0.2)",
-    borderTop: "3px solid #4f7cff",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
+  emptyTitle: {
+    fontWeight: 700,
+    fontSize: 15,
+    marginBottom: 8,
+    color: "var(--text-primary)",
   },
-  loadingText: {
-    color: "#c8d6f0",
-    fontSize: 14,
-    opacity: 0.8,
+  emptyHint: {
+    fontSize: 13,
+    lineHeight: 1.55,
+    maxWidth: 280,
+    margin: 0,
+    opacity: 0.65,
   },
   errorText: {
-    color: "#ff8a8a",
+    color: "var(--error-color)",
     fontSize: 14,
-    fontWeight: 600,
-  },
-  hint: {
-    color: "#c8d6f0",
-    fontSize: 13,
-    opacity: 0.7,
-  },
-  noDataTitle: {
-    color: "#c8d6f0",
-    fontSize: 16,
-    fontWeight: 700,
-    margin: 0,
-  },
-  noDataHint: {
-    color: "#c8d6f0",
-    fontSize: 13,
-    opacity: 0.6,
-    textAlign: "center",
-    maxWidth: 280,
-    lineHeight: 1.5,
     margin: 0,
   },
 };

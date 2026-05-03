@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import Plot from "react-plotly.js";
+import ReactECharts from "echarts-for-react";
+import { radarPlotToEcharts } from "../lib/plotlyToEcharts.js";
+import AppErrorBoundary from "../components/ErrorBoundary.jsx";
 
 export default function RadarPlot({ goalIndex = 0, figure: prefetchedFigure }) {
   const [figure, setFigure] = useState(prefetchedFigure ?? null);
@@ -11,101 +13,91 @@ export default function RadarPlot({ goalIndex = 0, figure: prefetchedFigure }) {
     fetch(`/api/visualizations/radarplot?goal_index=${goalIndex}`, {
       credentials: "include",
     })
-      .then((res) => {
+      .then(res => {
         if (!res.ok) throw new Error(`Server error: ${res.status}`);
         return res.json();
       })
-      .then((fig) => setFigure(fig))
-      .catch((err) => setError(err.message));
+      .then(fig => setFigure(fig))
+      .catch(err => setError(err.message));
   }, [goalIndex]); // eslint-disable-line
+
+  const option = figure ? radarPlotToEcharts(figure) : null;
+  const tableData = radarPlotToEcharts._lastTableData;
 
   if (error) {
     return (
-      <div style={styles.fallback}>
-        <p style={styles.errorText}>Could not load radar plot: {error}</p>
+      <div style={s.fallback}>
+        <p style={s.errorText}>Could not load radar plot: {error}</p>
       </div>
     );
   }
 
-  if (!figure) {
+  if (!option) {
     return (
-      <div style={styles.fallback}>
-        <div style={styles.spinner} />
-        <p style={styles.loadingText}>Loading radar plot...</p>
+      <div style={s.fallback}>
+        <p style={s.emptyText}>Survey data will appear here after Week 2.</p>
       </div>
     );
   }
-
-  // Empty figure (no traces) means backend returned no data — show a clean message
-  // instead of letting Plotly render a blank cartesian chart.
-  if (!figure.data || figure.data.length === 0) {
-    return (
-      <div style={styles.fallback}>
-        <p style={styles.noDataText}>No trait data available for this goal.</p>
-      </div>
-    );
-  }
-
-  const layout = {
-    ...figure.layout,
-    autosize: true,
-    width: undefined,
-    // height: 540,
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(0,0,0,0)",
-    margin: { t: 80, l: 60, r: 60, b: 60 },
-  };
 
   return (
-    <Plot
-      data={figure.data}
-      layout={layout}
-      config={{
-        responsive: true,
-        scrollZoom: true,
-        displayModeBar: true,
-        displaylogo: false,
-        modeBarButtonsToRemove: ["lasso2d", "select2d"],
-      }}
-      style={{ width: "100%" }}
-      useResizeHandler
-    />
+    <AppErrorBoundary context="chart">
+      <ReactECharts
+        option={option}
+        style={{ width: "100%", height: "260px" }}
+        opts={{ renderer: "svg" }}
+      />
+
+      {/* Screen-reader data table fallback */}
+      {tableData && (
+        <table className="sr-only" aria-label="Radar chart data table">
+          <thead>
+            <tr>
+              <th scope="col">Timepoint</th>
+              {tableData.traitNames.map(t => (
+                <th key={t} scope="col">{t}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tableData.seriesData.map(row => (
+              <tr key={row.name}>
+                <th scope="row">{row.name}</th>
+                {row.value.map((v, i) => (
+                  <td key={i}>{v > 0 ? v.toFixed(2) : "—"}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </AppErrorBoundary>
   );
 }
 
-const styles = {
+const s = {
   fallback: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 200,
-    gap: 12,
+    minHeight: 160,
+    gap: 8,
+    padding: 16,
   },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: "3px solid rgba(79,124,255,0.2)",
-    borderTop: "3px solid #4f7cff",
-    borderRadius: "50%",
-    animation: "spin 0.8s linear infinite",
-  },
-  loadingText: {
-    color: "#c8d6f0",
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  errorText: {
-    color: "#ff8a8a",
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  noDataText: {
-    color: "#c8d6f0",
+  emptyText: {
+    color: "var(--text-dim)",
     fontSize: 13,
-    opacity: 0.65,
     textAlign: "center",
     maxWidth: 220,
     lineHeight: 1.5,
+    margin: 0,
+    opacity: 0.7,
+  },
+  errorText: {
+    color: "var(--error-color)",
+    fontSize: 13,
+    fontWeight: 600,
+    margin: 0,
   },
 };
