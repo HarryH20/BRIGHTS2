@@ -1,10 +1,8 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { useTheme } from "../ThemeContext.jsx";
 
 export default function HomeLayout({ user, onLogout, title, rightSlot, children }) {
   const name = user?.username || "user";
-  const { theme, toggleTheme } = useTheme();
 
   return (
     <div className="home-page" style={styles.page}>
@@ -28,9 +26,6 @@ export default function HomeLayout({ user, onLogout, title, rightSlot, children 
         </div>
 
         <div className="home-header-right" style={styles.right}>
-          <button type="button" onClick={toggleTheme} style={styles.themeBtn} aria-label="Toggle theme">
-            {theme === "dark" ? "☀ Light" : "🌙 Dark"}
-          </button>
           <button type="button" onClick={onLogout} style={styles.logoutBtn}>
             Logout
           </button>
@@ -91,18 +86,6 @@ export const styles = {
     fontWeight: 700,
     display: "inline-flex",
     alignItems: "center",
-  },
-
-  themeBtn: {
-    padding: "8px 12px",
-    borderRadius: 12,
-    border: "1px solid var(--ghost-border)",
-    background: "var(--ghost-bg)",
-    color: "var(--ghost-color)",
-    cursor: "pointer",
-    fontWeight: 700,
-    fontSize: 13,
-    whiteSpace: "nowrap",
   },
 
   adminBtn: {

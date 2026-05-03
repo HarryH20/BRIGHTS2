@@ -277,9 +277,12 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
               style={{ ...styles.card, gridColumn: `span ${colSpan}` }}
             >
               <div style={styles.cardHeader}>
-                <h2 style={styles.h2} title={g.text}>
-                  Goal {idx + 1}: {shortTitle}
-                </h2>
+                <div className="goal-name-wrapper">
+                  <h2 style={styles.h2}>
+                    Goal {idx + 1}: {shortTitle}
+                  </h2>
+                  <span className="goal-tooltip">{g.text}</span>
+                </div>
                 <Link to={`/goals/${g.goal_id}`} style={styles.smallLink}>
                   Open →
                 </Link>
@@ -482,6 +485,7 @@ const styles = {
     borderRadius: 12,
     border: "1px solid var(--subtle-border)",
     background: "#0b1220",
+    paddingBottom: 8,
   },
 
   filtersRow: {
@@ -512,6 +516,7 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "repeat(6, 1fr)",
     gap: 10,
+    paddingBottom: 4,
   },
   trackerCell: {
     display: "flex",

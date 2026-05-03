@@ -65,7 +65,7 @@ export default function RadarPlot({ goalIndex = 0, figure: prefetchedFigure, sho
       )}
       <ReactECharts
         option={option}
-        style={{ width: "100%", height: "260px" }}
+        style={{ width: "100%", height: "280px" }}
         opts={{ renderer: "svg" }}
       />
 

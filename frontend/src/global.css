@@ -48,27 +48,6 @@
   --ghost-color: rgba(233, 238, 252, 0.92);
 }
 
-[data-theme="light"] {
-  --page-bg: radial-gradient(1200px 600px at 20% 0%, #dde8ff 0%, #f0f4ff 55%, #f8f9fe 100%);
-  --auth-page-bg: #f0f4ff;
-  --card-bg: rgba(255, 255, 255, 0.75);
-  --header-bg: rgba(255, 255, 255, 0.85);
-  --auth-card-bg: #ffffff;
-  --auth-card-border: #c8d4f0;
-  --input-bg: #f0f4ff;
-  --input-bg-glass: rgba(0, 0, 0, 0.04);
-  --input-border: #c0cce8;
-  --input-border-glass: rgba(0, 0, 0, 0.1);
-  --surface-subtle: rgba(0, 0, 0, 0.025);
-  --card-border: rgba(79, 124, 255, 0.18);
-  --header-border: rgba(79, 124, 255, 0.2);
-  --subtle-border: rgba(79, 124, 255, 0.12);
-  --text-primary: #0f172a;
-  --text-dim: rgba(15, 23, 42, 0.6);
-  --ghost-bg: rgba(0, 0, 0, 0.05);
-  --ghost-border: rgba(0, 0, 0, 0.12);
-  --ghost-color: rgba(15, 23, 42, 0.88);
-}
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -178,10 +157,6 @@ select option {
   color: #e9eefc;
 }
 
-[data-theme="light"] select option {
-  background: #f0f4ff;
-  color: #0f172a;
-}
 
 /* ── Accessibility utilities ────────────────── */
 .sr-only {
@@ -337,4 +312,33 @@ select option {
 .success-icon {
   display: inline-block;
   animation: check-bounce 0.5s ease 0.1s both;
+}
+
+/* Goal name CSS tooltip (replaces native title="" browser tooltip) */
+.goal-name-wrapper {
+  position: relative;
+  cursor: default;
+}
+
+.goal-name-wrapper .goal-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: normal;
+  max-width: 220px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  pointer-events: none;
+}
+
+.goal-name-wrapper:hover .goal-tooltip {
+  display: block;
 }

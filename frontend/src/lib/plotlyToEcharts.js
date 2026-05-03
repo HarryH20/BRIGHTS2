@@ -18,7 +18,17 @@ function reducedMotion() {
 }
 
 function stripHtml(str) {
-  return (str || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').trim();
+  return (str || '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#9650;/g, '▲')
+    .replace(/&#9654;/g, '▶')
+    .replace(/&#9660;/g, '▼')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .trim();
 }
 
 /**
@@ -256,13 +266,16 @@ export function radarPlotToEcharts(figure) {
     animationDuration: 600,
     animationEasing: 'cubicOut',
     backgroundColor: 'transparent',
+    grid: { containLabel: true },
     legend: {
       data: seriesData.map(d => d.name),
-      textStyle: { color: textColor },
-      top: 0,
+      textStyle: { color: textColor, fontSize: 10 },
+      orient: 'horizontal',
+      bottom: 0,
       left: 'center',
-      itemWidth: 12,
-      itemHeight: 12,
+      itemWidth: 10,
+      itemHeight: 10,
+      formatter: name => name.length > 8 ? name.slice(0, 7) + '…' : name,
     },
     tooltip: {
       trigger: 'item',
@@ -274,11 +287,13 @@ export function radarPlotToEcharts(figure) {
       indicator,
       shape: 'polygon',
       splitNumber: 6,
-      center: ['50%', '55%'],
-      radius: '65%',
+      center: ['50%', '48%'],
+      radius: '55%',
       axisName: {
         color: textColor,
         fontSize: 11,
+        padding: [0, 4],
+        formatter: name => name.length > 12 ? name.slice(0, 11) + '…' : name,
       },
       splitLine: {
         lineStyle: { color: gridColor, width: 1 },
@@ -792,9 +807,8 @@ export function alluvialToEcharts(figure) {
   const tooltipBg = cssVar('--chart-tooltip-bg') || 'rgba(16,25,42,0.95)';
   const tooltipBorder = cssVar('--chart-tooltip-border') || 'rgba(155,183,255,0.16)';
 
-  const titleLines = stripHtml(layout.title?.text || '').split('\n').map(s => s.trim()).filter(Boolean);
-  const mainTitle  = titleLines[0] || '';
-  const subTitle   = titleLines.slice(1).join(' ');
+  const mainTitle = 'Participant Flow Across Study Timepoints';
+  const subTitle  = 'Sankey diagram showing transitions between groups (T1–T6)';
 
   const nodeLabels = trace.node?.label  || [];
   const nodeColors = trace.node?.color  || [];
