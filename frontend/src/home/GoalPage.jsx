@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
+import JourneyPath from "./JourneyPath.jsx";
 import RadarPlot from "../graphs/RadarPlot.jsx";
 import { AlertCircle } from "lucide-react";
 
@@ -74,11 +75,13 @@ function Sparkline({ scores, color }) {
 
 export default function GoalPage({ user, onLogout }) {
   const { goalId } = useParams();
-  const [goal,      setGoal]      = useState(null);
-  const [goalIndex, setGoalIndex] = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(null);
-  const [weeks,     setWeeks]     = useState("2-6");
+  const [goal,             setGoal]             = useState(null);
+  const [goalIndex,        setGoalIndex]        = useState(null);
+  const [loading,          setLoading]          = useState(true);
+  const [error,            setError]            = useState(null);
+  const [weeks,            setWeeks]            = useState("2-6");
+  const [surveyCompletion, setSurveyCompletion] = useState(null);
+  const [surveyTimepoint,  setSurveyTimepoint]  = useState(null);
 
   const shownTPs = useMemo(() => tpsForWeeks(weeks), [weeks]);
 
@@ -93,6 +96,16 @@ export default function GoalPage({ user, onLogout }) {
       })
       .catch(() => setError("Failed to load goal data."))
       .finally(() => setLoading(false));
+
+    fetch("/api/survey/status", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setSurveyCompletion(d.timepoints ?? null))
+      .catch(() => {});
+
+    fetch("/api/survey/next", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setSurveyTimepoint(d.timepoint ?? null))
+      .catch(() => {});
   }, [goalId]);
 
   // --- derived data for summary cards and best week ---
@@ -119,7 +132,20 @@ export default function GoalPage({ user, onLogout }) {
   }, [goal]);
 
   return (
-    <HomeLayout user={user} onLogout={onLogout}>
+    <ParticipantShell user={user} onLogout={onLogout}>
+      <div style={{ maxWidth: 760, margin: "0 auto", padding: "24px 16px" }}>
+
+      {/* Compact journey path */}
+      {surveyCompletion && (
+        <div style={{ marginBottom: 20 }}>
+          <JourneyPath
+            surveyCompletion={surveyCompletion}
+            currentTimepoint={surveyTimepoint}
+            compact
+          />
+        </div>
+      )}
+
       <div style={s.card}>
         {/* Filter bar */}
         <div style={s.row}>
@@ -261,7 +287,8 @@ export default function GoalPage({ user, onLogout }) {
           </>
         )}
       </div>
-    </HomeLayout>
+      </div>
+    </ParticipantShell>
   );
 }
 

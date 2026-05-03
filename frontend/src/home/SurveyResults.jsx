@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
 import { FileText } from "lucide-react";
 
 /* ============================
@@ -205,13 +205,13 @@ export default function SurveyResults({
 
   // Standalone page
   return (
-    <HomeLayout
+    <ParticipantShell
       user={user}
       onLogout={onLogout}
       title={`${tpLabel} Survey — Results`}
     >
       {content}
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 

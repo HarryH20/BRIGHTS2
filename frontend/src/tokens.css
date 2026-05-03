@@ -5,6 +5,46 @@
    so every value has exactly one definition and white-labeling is safe.
    ───────────────────────────────────────────────────────────────────────────── */
 
+/* ── Dual-shell design system tokens ─────────────────────────────────────── */
+:root {
+  /* Page surface tiers */
+  --shell-bg:             #0B0D10;
+  --shell-bg-elevated:    #111418;
+  --shell-bg-overlay:     #161A20;
+
+  /* Component surfaces */
+  --shell-surface-1:      #14181D;
+  --shell-surface-2:      #1A1F26;
+  --shell-surface-3:      #232932;
+
+  /* Borders */
+  --shell-border:         #1F242C;
+  --shell-border-strong:  #2A3038;
+  --shell-border-active:  #3A424D;
+
+  /* Text */
+  --shell-text:           #ECEEF1;
+  --shell-text-secondary: #A8B0BB;
+  --shell-text-muted:     #6B7480;
+
+  /* Accents */
+  --shell-accent:         #6E8BFF;
+  --shell-teal:           #4FD1C5;
+  --shell-amber:          #F2B544;
+  --shell-rose:           #F26D7B;
+
+  /* Sidebar specific */
+  --sidebar-width:        256px;
+  --sidebar-width-icon:   56px;
+  --sidebar-bg:           #111418;
+  --sidebar-border:       #1F242C;
+  --sidebar-text:         #A8B0BB;
+  --sidebar-text-active:  #ECEEF1;
+  --sidebar-active-bg:    rgba(110,139,255,0.10);
+  --sidebar-hover-bg:     rgba(255,255,255,0.04);
+  --sidebar-group-label:  #6B7480;
+}
+
 :root {
   /* ── Brand / Accent ──────────────────────────────────────────────────────── */
   --accent:              #4f7cff;
@@ -108,5 +148,26 @@
   --bp-mobile:  480px;
   --bp-tablet:  768px;
   --bp-desktop: 1100px;
+}
+
+/* ── Shell design system — dual-shell architecture tokens ─────────────────── */
+:root {
+  --shell-bg:              #0B0D10;
+  --shell-bg-elevated:     #111418;
+  --shell-bg-overlay:      #161A20;
+  --shell-surface-1:       #14181D;
+  --shell-surface-2:       #1A1F26;
+  --shell-surface-3:       #232932;
+  --shell-border:          #1F242C;
+  --shell-border-strong:   #2A3038;
+  --shell-border-active:   #3A424D;
+  --shell-text:            #ECEEF1;
+  --shell-text-secondary:  #A8B0BB;
+  --shell-text-muted:      #6B7480;
+  --shell-accent:          #6E8BFF;
+  --shell-teal:            #4FD1C5;
+  --shell-amber:           #F2B544;
+  --shell-rose:            #F26D7B;
+  --sidebar-active-bg:     rgba(110, 139, 255, 0.12);
 }
 

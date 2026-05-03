@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useParams } from "react-router-dom";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
 import SurveyResults from "./SurveyResults.jsx";
 import SurveyAnalysis from "./SurveyAnalysis.jsx";
 
@@ -10,7 +10,7 @@ export default function SurveyWeekPage({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState("results");
 
   return (
-    <HomeLayout
+    <ParticipantShell
       user={user}
       onLogout={onLogout}
       title={`Week ${week} Survey`}
@@ -56,7 +56,7 @@ export default function SurveyWeekPage({ user, onLogout }) {
           />
         )}
       </div>
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 

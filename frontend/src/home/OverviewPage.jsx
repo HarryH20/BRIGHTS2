@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
 import RosePlot from "../graphs/RosePlot.jsx";
 import LoadingScreen from "./LoadingScreen.jsx";
 
@@ -54,7 +54,7 @@ export default function OverviewPage({ user, onLogout }) {
   if (!ready) return <LoadingScreen status={loadingStatus} />;
 
   return (
-    <HomeLayout user={user} onLogout={onLogout}>
+    <ParticipantShell user={user} onLogout={onLogout}>
       <div style={card}>
         <div style={row}>
           <label style={label}>
@@ -94,7 +94,7 @@ export default function OverviewPage({ user, onLogout }) {
           <RosePlot figure={filteredRoseFigure || roseFigure} />
         </div>
       </div>
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 

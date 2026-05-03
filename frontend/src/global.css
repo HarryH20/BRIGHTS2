@@ -64,6 +64,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* ── Tabular numerics utility ─────────────── */
+.tabular-nums {
+  font-variant-numeric: tabular-nums slashed-zero;
 }
 
 /* ── Buttons ────────────────────────────────── */
@@ -335,4 +341,46 @@ select option {
 
 .goal-name-wrapper:hover .goal-tooltip {
   display: block;
+}
+
+/* ── ParticipantShell responsive ─────────────────────────────────────────── */
+
+/* Desktop: show nav pills, hide bottom nav */
+@media (min-width: 768px) {
+  .participant-bottom-nav {
+    display: none !important;
+  }
+  .participant-main {
+    padding-bottom: 0 !important;
+  }
+}
+
+/* Mobile: hide desktop nav pills and name label, show bottom nav */
+@media (max-width: 767px) {
+  .participant-desktop-nav {
+    display: none !important;
+  }
+  .participant-name-label {
+    display: none !important;
+  }
+  .participant-main {
+    padding-bottom: 72px;
+  }
+}
+
+/* Hover polish for bottom tab links (override global a:hover) */
+.participant-bottom-nav a:hover {
+  transform: none;
+  box-shadow: none;
+  filter: none;
+  color: var(--shell-accent);
+}
+
+/* Pill nav hover state */
+.participant-desktop-nav a:hover {
+  background: var(--shell-surface-2) !important;
+  color: var(--shell-text) !important;
+  transform: none;
+  box-shadow: none;
+  filter: none;
 }

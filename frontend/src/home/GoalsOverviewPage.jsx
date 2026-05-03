@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Target } from "lucide-react";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
 import GoalCard from "./GoalCard.jsx";
 import SkeletonGoalCard from "../components/SkeletonGoalCard.jsx";
 
@@ -41,7 +41,7 @@ export default function GoalsOverviewPage({ user, onLogout }) {
   const colSpan = goals.length <= 1 ? 12 : goals.length === 2 ? 6 : 4;
 
   return (
-    <HomeLayout user={user} onLogout={onLogout}>
+    <ParticipantShell user={user} onLogout={onLogout}>
       <div style={s.grid} className="grid12">
         {!goalsLoaded && [0, 1, 2].map(i => (
           <section key={i} style={{ ...s.card, gridColumn: "span 4" }}>
@@ -69,7 +69,7 @@ export default function GoalsOverviewPage({ user, onLogout }) {
           />
         ))}
       </div>
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 

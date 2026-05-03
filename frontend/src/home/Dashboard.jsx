@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import RosePlot from "../graphs/RosePlot.jsx";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
 import GoalCard from "./GoalCard.jsx";
+import JourneyPath from "./JourneyPath.jsx";
+import SurveyHeroCard from "./SurveyHeroCard.jsx";
 import OnboardingModal from "./OnboardingModal.jsx";
 import SkeletonCard from "../components/SkeletonCard.jsx";
 import SkeletonGoalCard from "../components/SkeletonGoalCard.jsx";
@@ -10,11 +12,16 @@ import { Target } from "lucide-react";
 
 const ONBOARDED_KEY = "brights2_onboarded";
 
-const TP_LABELS = { T2: "Week 2", T3: "Week 3", T4: "Week 4", T5: "Week 5", T6: "Week 6" };
-const TP_ORDER  = ["T6", "T5", "T4", "T3", "T2"];
-const TP_WEEK  = { 1: "Week 1", 2: "Week 2", 3: "Week 3", 4: "Week 4", 5: "Week 5", 6: "Week 6" };
+const TP_ORDER = ["T6", "T5", "T4", "T3", "T2"];
+
+function greeting(name) {
+  const h = new Date().getHours();
+  const time = h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
+  return `Good ${time}, ${name}!`;
+}
 
 export default function Dashboard({ user, onLogout, chartCache, setChartCache }) {
+  const navigate = useNavigate();
   const [goalFilter, setGoalFilter] = useState("all");
   const [weekFilter, setWeekFilter] = useState("2-6");
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -29,6 +36,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
   const [loadingStatus, setLoadingStatus] = useState("Loading your goals...");
   const [surveyStatus, setSurveyStatus] = useState(null);   // "due" | "locked" | "complete" | null
   const [surveyTimepoint, setSurveyTimepoint] = useState(null);
+  const [surveyApiData, setSurveyApiData] = useState(null); // full /api/survey/next response
   const [surveyCompletion, setSurveyCompletion] = useState(null); // array of 6 timepoint statuses
 
   useEffect(() => {
@@ -37,6 +45,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
       .then((d) => {
         setSurveyStatus(d.status);
         setSurveyTimepoint(d.timepoint ?? null);
+        setSurveyApiData(d);
         if (
           d.status === "due" &&
           d.timepoint === 1 &&
@@ -94,7 +103,6 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
         radarResults.forEach((r) => {
           if (r.status === "fulfilled") radars[r.value.idx] = r.value.fig;
         });
-
         setRadarFigures(radars);
         setChartCache?.({ goals: fetchedGoals, roseFigure: rose, radarFigures: radars, loaded: true });
         setReady(true);
@@ -105,334 +113,266 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
   // Refetch roseplot whenever filters change (after initial load)
   useEffect(() => {
     if (!ready) return;
-
     const params = new URLSearchParams();
     if (goalFilter !== "all") params.set("goal_id", goalFilter);
     if (weekFilter !== "all") params.set("weeks", weekFilter);
-
     fetch(`/api/visualizations/roseplot?${params.toString()}`, { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then((fig) => setFilteredRoseFigure(fig))
       .catch(() => {});
   }, [goalFilter, weekFilter, ready]); // eslint-disable-line
 
-  // Timepoints that have at least one non-null score across any goal
-  const activeTimepoints = TP_ORDER.filter((tp) =>
-    goals.some((g) => Object.values(g.timepoints?.[tp] || {}).some((v) => v !== null))
-  );
-
   const colSpan = goals.length <= 1 ? 12 : goals.length === 2 ? 6 : 4;
 
+  const surveysCompleted = surveyCompletion
+    ? surveyCompletion.filter((t) => t.completed).length
+    : 0;
+
+  const displayName = user?.display_name || user?.username || "there";
+
+  const processInsight = (() => {
+    if (!surveyCompletion) return null;
+    if (surveysCompleted >= 2) {
+      const cohortApprox = Math.max(500, 904 - surveysCompleted * 40);
+      return `${surveysCompleted} of 6 surveys complete. ${cohortApprox}+ participants are tracking goals alongside you.`;
+    }
+    if (surveysCompleted === 1) {
+      return "You've set your goals. Check back next week to see how you're tracking.";
+    }
+    return null;
+  })();
 
   return (
     <>
-    {showOnboarding && (
-      <OnboardingModal onClose={() => setShowOnboarding(false)} />
-    )}
-    <HomeLayout user={user} onLogout={onLogout}>
-      <div style={styles.grid} className="grid12">
-        {/* Survey prompt */}
-        {surveyStatus === "due" && (
-          <section className="survey-banner-mobile" style={{ ...styles.card, gridColumn: "1 / -1", ...styles.surveyBanner }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>
-                {TP_WEEK[surveyTimepoint] ?? "Weekly"} survey is ready
-              </div>
-              <div style={styles.muted}>Complete this week's survey to keep your data up to date.</div>
-            </div>
-            <Link to="/survey" style={styles.primaryBtn}>Start Survey →</Link>
-          </section>
-        )}
+      {showOnboarding && (
+        <OnboardingModal onClose={() => setShowOnboarding(false)} />
+      )}
+      <ParticipantShell user={user} onLogout={onLogout}>
+        <div style={styles.page}>
 
-        {surveyStatus === "locked" && surveyTimepoint && (
-          <section style={{ ...styles.card, gridColumn: "1 / -1", opacity: 0.7 }}>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>
-              🔒 {TP_WEEK[surveyTimepoint]} survey not yet available — unlocks next week.
-            </div>
-          </section>
-        )}
+          {/* 1. Greeting */}
+          <div style={styles.greeting}>{greeting(displayName)}</div>
 
-        {/* Timepoint completion tracker */}
-        {surveyCompletion && (
-          <section style={{ ...styles.card, gridColumn: "1 / -1" }}>
-            <div style={styles.cardHeader}>
-              <h2 style={styles.h2}>Survey Progress</h2>
-              <span style={{ fontSize: 13, opacity: 0.6 }}>
-                {surveyCompletion.filter((t) => t.completed).length} / 6 completed
-              </span>
+          {/* 2. Survey hero card */}
+          {surveyStatus && (
+            <div style={styles.section}>
+              <SurveyHeroCard
+                status={surveyStatus}
+                timepoint={surveyTimepoint}
+                nextUnlocksAt={surveyApiData?.next_unlocks_at ?? surveyApiData?.unlocks_at}
+                onStartSurvey={() => navigate("/survey")}
+              />
             </div>
-            <div style={styles.trackerRow} className="trackerRowMobile">
-              {surveyCompletion.map((t) =>
-                t.completed ? (
-                  <Link
-                    key={t.timepoint}
-                    to={`/survey/week/${t.timepoint}`}
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <div
-                      style={{
-                        ...styles.trackerCell,
-                        ...styles.trackerDone,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <span style={styles.trackerWeek}>Week {t.timepoint}</span>
-                      <span style={styles.trackerIcon}>✓</span>
-                      {t.submitted_at && (
-                        <span style={styles.trackerDate}>
-                          {new Date(t.submitted_at).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </Link>
-                ) : (
-                  <div
-                    key={t.timepoint}
-                    style={{
-                      ...styles.trackerCell,
-                      ...styles.trackerMissing,
-                      opacity: 0.5,
-                      cursor: "not-allowed",
-                    }}
-                  >
-                    <span style={styles.trackerWeek}>Week {t.timepoint}</span>
-                    <span style={styles.trackerIcon}>✗</span>
+          )}
+
+          {/* 3. Journey path */}
+          {surveyCompletion && (
+            <div style={styles.section}>
+              <div style={styles.sectionLabel}>Your 6-Week Journey</div>
+              <JourneyPath
+                surveyCompletion={surveyCompletion}
+                currentTimepoint={surveyTimepoint}
+              />
+            </div>
+          )}
+
+          {/* 4. Goal cards */}
+          <div style={styles.section}>
+            <div style={styles.sectionLabel}>Your Goals</div>
+
+            {/* Skeletons while loading */}
+            {!goalsLoaded && (
+              <div style={{ ...styles.goalsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={styles.skeletonWrap}>
+                    <SkeletonGoalCard />
                   </div>
-                )
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Goal Cards — show skeletons while goals data is loading */}
-        {!goalsLoaded ? (
-          [0, 1, 2].map(i => (
-            <section key={i} style={{ ...styles.card, gridColumn: `span 4` }}>
-              <SkeletonGoalCard />
-            </section>
-          ))
-        ) : null}
-
-        {goalsLoaded && goals.length === 0 && (
-          <section style={{ ...styles.card, gridColumn: "1 / -1", textAlign: "center", padding: 40 }}>
-            <Target size={40} style={{ opacity: 0.3, marginBottom: 12, color: "var(--text-dim)" }} />
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No goals yet</div>
-            <p style={styles.muted}>Complete your Week 1 survey to set up your goals and start tracking your progress.</p>
-            {surveyStatus === "due" && (
-              <Link to="/survey" style={{ ...styles.primaryBtn, display: "inline-flex", marginTop: 16 }}>
-                Take the Week 1 Survey →
-              </Link>
+                ))}
+              </div>
             )}
-          </section>
-        )}
 
-        {goalsLoaded && goals.map((g, idx) => (
-          <GoalCard
-            key={g.goal_id}
-            goal={g}
-            idx={idx}
-            radarFigure={radarFigures[idx]}
-            colSpan={colSpan}
-          />
-        ))}
+            {goalsLoaded && goals.length === 0 && (
+              <div style={styles.emptyCard}>
+                <Target size={40} style={{ opacity: 0.3, marginBottom: 12, color: "var(--shell-text-muted)" }} />
+                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: "var(--shell-text)" }}>
+                  No goals yet
+                </div>
+                <p style={{ fontSize: 14, color: "var(--shell-text-secondary)", margin: 0, maxWidth: 280 }}>
+                  Complete your Week 1 survey to set up your goals and start tracking your progress.
+                </p>
+                {surveyStatus === "due" && (
+                  <Link to="/survey" style={styles.ctaLink}>
+                    Take the Week 1 Survey →
+                  </Link>
+                )}
+              </div>
+            )}
 
-        {/* Overview */}
-        <section style={{ ...styles.card, gridColumn: "1 / -1" }}>
-          <div style={styles.cardHeader}>
-            <h2 style={styles.h2}>Overview</h2>
-            <Link to="/overview" style={styles.smallLink}>
-              Open →
-            </Link>
+            {goalsLoaded && goals.length > 0 && (
+              <div style={styles.goalsGrid}>
+                {goals.map((g, idx) => (
+                  <GoalCard
+                    key={g.goal_id}
+                    goal={g}
+                    idx={idx}
+                    radarFigure={radarFigures[idx]}
+                    colSpan={colSpan}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          <div style={styles.filtersRow} className="filtersRowMobile">
-            <div style={styles.muted}>filter by goal(s), week(s):</div>
-
-            <select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} style={styles.select}>
-              <option value="all">All Goals</option>
-              {goals.map((g) => (
-                <option key={g.goal_id} value={String(g.goal_id)}>
-                  {g.text.length > 24 ? g.text.slice(0, 24) + "…" : g.text}
-                </option>
-              ))}
-            </select>
-
-            <select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} style={styles.select}>
-              <option value="all">All Weeks</option>
-              {/* Week 1 not supported by GT2..GT6 dataset; leaving it causes blanks */}
-              <option value="2-6">Week 2–6</option>
-              <option value="3-6">Week 3–6</option>
-              <option value="4-6">Week 4–6</option>
-              <option value="5-6">Week 5–6</option>
-            </select>
-          </div>
-
-          <div style={styles.overviewBox}>
-            <div style={{ width: "100%" }}>
-              {!filteredRoseFigure && !goalsLoaded ? (
-                <SkeletonCard height={380} label="Loading overview chart..." />
-              ) : (
-                <RosePlot figure={filteredRoseFigure || roseFigure} />
-              )}
+          {/* 5. Overview chart */}
+          <div style={styles.section}>
+            <div style={styles.sectionLabel}>Progress Overview</div>
+            <div style={styles.chartCard}>
+              <div style={styles.filtersRow} className="filtersRowMobile">
+                <span style={{ fontSize: 13, color: "var(--shell-text-muted)" }}>
+                  Filter:
+                </span>
+                <select
+                  value={goalFilter}
+                  onChange={(e) => setGoalFilter(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="all">All Goals</option>
+                  {goals.map((g) => (
+                    <option key={g.goal_id} value={String(g.goal_id)}>
+                      {g.text.length > 24 ? g.text.slice(0, 24) + "…" : g.text}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={weekFilter}
+                  onChange={(e) => setWeekFilter(e.target.value)}
+                  style={styles.select}
+                >
+                  <option value="all">All Weeks</option>
+                  <option value="2-6">Week 2–6</option>
+                  <option value="3-6">Week 3–6</option>
+                  <option value="4-6">Week 4–6</option>
+                  <option value="5-6">Week 5–6</option>
+                </select>
+                <Link to="/overview" style={styles.overviewLink}>Open full view →</Link>
+              </div>
+              <div style={styles.chartBox}>
+                {!filteredRoseFigure && !goalsLoaded ? (
+                  <SkeletonCard height={380} label="Loading overview chart..." />
+                ) : (
+                  <RosePlot figure={filteredRoseFigure || roseFigure} />
+                )}
+              </div>
             </div>
           </div>
-        </section>
-      </div>
-    </HomeLayout>
+
+          {/* 6. Process-only insight */}
+          {processInsight && (
+            <p style={styles.insight}>{processInsight}</p>
+          )}
+        </div>
+      </ParticipantShell>
     </>
   );
 }
 
 const styles = {
-  grid: { display: "grid", gap: 16 },
-  card: {
+  page: {
+    maxWidth: 760,
+    margin: "0 auto",
+    padding: "24px 16px",
+  },
+  greeting: {
+    fontSize: 14,
+    color: "var(--shell-text-muted)",
+    marginBottom: 16,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+    color: "var(--shell-text-muted)",
+    marginBottom: 12,
+  },
+  goalsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+    gap: 16,
+  },
+  skeletonWrap: {
     padding: 18,
     borderRadius: 16,
-    border: "1px solid var(--card-border)",
-    background: "var(--card-bg)",
-    boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
-    backdropFilter: "blur(8px)",
+    border: "1px solid var(--shell-border)",
+    background: "var(--shell-surface-1)",
   },
-  cardHeader: {
+  emptyCard: {
+    padding: 40,
+    borderRadius: 16,
+    border: "1px solid var(--shell-border)",
+    background: "var(--shell-surface-1)",
+    textAlign: "center",
     display: "flex",
+    flexDirection: "column",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 10,
   },
-  h2: { margin: 0, fontSize: 20 },
-  muted: { opacity: 0.82, fontSize: 14, lineHeight: 1.45 },
-
-  linkBtn: {
-    padding: "10px 14px",
-    borderRadius: 12,
-    border: "1px solid var(--ghost-border)",
-    background: "var(--ghost-bg)",
-    color: "var(--ghost-color)",
-    textDecoration: "none",
-    fontWeight: 700,
+  ctaLink: {
+    marginTop: 16,
     display: "inline-flex",
-    alignItems: "center",
-  },
-  pillBtn: {
-    padding: "8px 12px",
-    borderRadius: 12,
-    border: "1px solid var(--ghost-border)",
-    background: "var(--ghost-bg)",
-    color: "var(--ghost-color)",
-    fontWeight: 900,
     textDecoration: "none",
-    fontSize: 13,
-  },
-  smallLink: {
-    textDecoration: "none",
-    color: "var(--ghost-color)",
+    color: "#fff",
     fontWeight: 700,
-    padding: "6px 10px",
+    padding: "10px 18px",
     borderRadius: 10,
-    border: "1px solid var(--ghost-border)",
-    background: "var(--ghost-bg)",
+    background: "var(--shell-accent)",
+    fontSize: 14,
   },
-  primaryBtn: {
-    textDecoration: "none",
-    color: "white",
-    fontWeight: 800,
-    padding: "8px 12px",
-    borderRadius: 12,
-    border: "1px solid rgba(37,99,235,0.65)",
-    background: "rgba(37,99,235,0.85)",
-    boxShadow: "0 10px 22px rgba(37,99,235,0.18)",
+  chartCard: {
+    borderRadius: 16,
+    border: "1px solid var(--shell-border)",
+    background: "var(--shell-surface-1)",
+    padding: 20,
   },
-
-  surveyBanner: {
-    display: "flex", alignItems: "center",
-    justifyContent: "space-between", gap: 16,
-    border: "1px solid rgba(79,124,255,0.4)",
-    background: "rgba(79,124,255,0.08)",
-  },
-
-  recentList: { display: "grid", gap: 10 },
-  recentRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid var(--subtle-border)",
-    background: "var(--surface-subtle)",
-  },
-  recentName: { fontWeight: 700 },
-  recentLinks: { display: "flex", gap: 10 },
-
-  summaryBox: {
-    borderRadius: 12,
-    border: "1px solid var(--subtle-border)",
-    background: "var(--surface-subtle)",
-    padding: 12,
-  },
-  summaryTitle: { fontWeight: 800, marginBottom: 6 },
-
-  graphBox: {
-    marginTop: 12,
-    borderRadius: 12,
-    border: "1px solid var(--subtle-border)",
-    background: "#0b1220",
-    paddingBottom: 8,
-  },
-
   filtersRow: {
     display: "flex",
     justifyContent: "flex-end",
     alignItems: "center",
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 14,
+    flexWrap: "wrap",
   },
   select: {
     padding: "8px 10px",
-    borderRadius: 12,
-    border: "1px solid var(--ghost-border)",
-    background: "var(--ghost-bg)",
-    color: "var(--ghost-color)",
-    fontWeight: 800,
+    borderRadius: 10,
+    border: "1px solid var(--shell-border-strong)",
+    background: "var(--shell-surface-2)",
+    color: "var(--shell-text)",
+    fontWeight: 600,
     fontSize: 13,
     outline: "none",
   },
-  overviewBox: {
+  overviewLink: {
+    textDecoration: "none",
+    color: "var(--shell-accent)",
+    fontWeight: 700,
+    fontSize: 13,
+    marginLeft: "auto",
+  },
+  chartBox: {
     borderRadius: 12,
-    border: "1px solid var(--subtle-border)",
+    border: "1px solid var(--shell-border)",
     background: "#0b1220",
     padding: 12,
   },
-
-  trackerRow: {
-    display: "grid",
-    gridTemplateColumns: "repeat(6, 1fr)",
-    gap: 10,
-    paddingBottom: 4,
-  },
-  trackerCell: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 4,
-    padding: "12px 8px",
-    borderRadius: 12,
-    border: "1px solid",
+  insight: {
+    fontSize: 13,
+    color: "var(--shell-text-muted)",
+    fontStyle: "italic",
     textAlign: "center",
+    padding: "16px 0 8px",
+    margin: 0,
   },
-  trackerDone: {
-    borderColor: "rgba(74,222,128,0.35)",
-    background: "rgba(74,222,128,0.07)",
-  },
-  trackerMissing: {
-    borderColor: "rgba(248,113,113,0.25)",
-    background: "rgba(248,113,113,0.05)",
-  },
-  trackerWeek: { fontSize: 11, fontWeight: 700, opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.05em" },
-  trackerIcon: { fontSize: 20, lineHeight: 1 },
-  trackerDate: { fontSize: 11, opacity: 0.5 },
 };

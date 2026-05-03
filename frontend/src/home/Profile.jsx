@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
 
 export default function Profile({ user, onLogout, onUserUpdate }) {
   // ---------- change password ----------
@@ -105,7 +105,7 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
   }
 
   return (
-    <HomeLayout user={user} onLogout={onLogout} title="Profile / Settings">
+    <ParticipantShell user={user} onLogout={onLogout} title="Profile / Settings">
       <div style={styles.card}>
         {/* Basic Info */}
         <section style={styles.section}>
@@ -252,7 +252,7 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
         </section>
 
       </div>
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 

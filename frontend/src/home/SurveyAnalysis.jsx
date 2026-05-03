@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
 import { BarChart2 } from "lucide-react";
 
 /* ============================
@@ -238,9 +238,9 @@ export default function SurveyAnalysis({
   }
 
   return (
-    <HomeLayout user={user} onLogout={onLogout} title={`${tpLabel} Survey — Analysis`}>
+    <ParticipantShell user={user} onLogout={onLogout} title={`${tpLabel} Survey — Analysis`}>
       {content}
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 
