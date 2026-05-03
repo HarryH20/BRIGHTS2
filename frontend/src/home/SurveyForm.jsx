@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import HomeLayout from "./HomeLayout.jsx";
 
 const TP_LABELS = { 1: "Week 1", 2: "Week 2", 3: "Week 3", 4: "Week 4", 5: "Week 5", 6: "Week 6" };
+const DRAFT_KEY = "brights2_survey_draft_v1";
 
 const LIKERT7_LABELS = {
   1: "Strongly\nDisagree",
@@ -23,6 +24,7 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
 
   // Responses keyed by `${goal_index}__${question_id}`
   const [responses, setResponses] = useState({});
+  const [draftRestored, setDraftRestored] = useState(false);
 
   // Which goal tab is active (1-based)
   const [activeGoal, setActiveGoal] = useState(1);
@@ -36,6 +38,31 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasResponses, state]);
+
+  // Persist draft to localStorage whenever responses change
+  useEffect(() => {
+    if (state !== "due" || !surveyData) return;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      timepoint: surveyData.timepoint,
+      responses,
+    }));
+  }, [responses, state, surveyData]);
+
+  // Restore draft once surveyData loads
+  useEffect(() => {
+    if (state !== "due" || !surveyData) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft.timepoint === surveyData.timepoint && Object.keys(draft.responses).length > 0) {
+        setResponses(draft.responses);
+        setDraftRestored(true);
+      }
+    } catch {
+      // Corrupt draft — ignore
+    }
+  }, [state, surveyData?.timepoint]); // eslint-disable-line
 
   useEffect(() => {
     fetch("/api/survey/next", { credentials: "include" })
@@ -162,6 +189,7 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
         setSubmitError(data.error || "Submission failed.");
         setState("due");
       } else {
+        localStorage.removeItem(DRAFT_KEY);
         onSurveyComplete?.();
         setState("submitted");
       }
@@ -272,6 +300,24 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
       }
     >
       <div style={s.wrapper}>
+
+        {/* Draft restored banner */}
+        {draftRestored && (
+          <div style={s.draftBanner}>
+            <span>We restored your unsaved answers from your last session.</span>
+            <button
+              type="button"
+              style={s.draftDismiss}
+              onClick={() => {
+                localStorage.removeItem(DRAFT_KEY);
+                setResponses({});
+                setDraftRestored(false);
+              }}
+            >
+              Clear &amp; start fresh
+            </button>
+          </div>
+        )}
 
         {/* Progress bar */}
         <div style={s.progressTrack}>
@@ -513,6 +559,21 @@ const s = {
     border: "1px solid var(--ghost-border)",
     background: "var(--ghost-bg)",
     color: "var(--ghost-color)",
+  },
+
+  draftBanner: {
+    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+    padding: "10px 16px", borderRadius: 12, fontSize: 13,
+    border: "1px solid var(--survey-banner-border)",
+    background: "var(--survey-banner-bg)",
+    color: "var(--ghost-color)",
+  },
+  draftDismiss: {
+    padding: "6px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700,
+    border: "1px solid var(--ghost-border)",
+    background: "var(--ghost-bg)",
+    color: "var(--ghost-color)",
+    cursor: "pointer", whiteSpace: "nowrap",
   },
 
   center: { display: "flex", justifyContent: "center", padding: 60 },

@@ -28,8 +28,6 @@ Notes
 
 import re
 from sqlalchemy import text
-import re
-from sqlalchemy import text
 import plotly.graph_objects as go
 
 # ── Constants ─────────────────────────────────────────────────────────────────

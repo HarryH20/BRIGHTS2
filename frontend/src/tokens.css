@@ -1,0 +1,114 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   tokens.css — Extended design token layer
+   Supplements global.css (which holds the primary theme tokens).
+   Maps hard-coded literal values found in inline styles to named CSS variables
+   so every value has exactly one definition and white-labeling is safe.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Brand / Accent ──────────────────────────────────────────────────────── */
+  --accent:              #4f7cff;
+  --accent-2:            #7c5cff;
+  --accent-hover:        rgba(79, 124, 255, 0.18);
+  --accent-subtle:       rgba(79, 124, 255, 0.08);
+  --accent-border:       rgba(79, 124, 255, 0.4);
+  --accent-strong:       rgba(79, 124, 255, 0.85);
+  --accent-strong-border: rgba(79, 124, 255, 0.9);
+  --accent-focus-ring:   rgba(79, 124, 255, 0.15);
+
+  /* ── Primary button ──────────────────────────────────────────────────────── */
+  --primary-btn-bg:      rgba(37, 99, 235, 0.85);
+  --primary-btn-border:  rgba(37, 99, 235, 0.65);
+  --primary-btn-shadow:  rgba(37, 99, 235, 0.18);
+  --primary-btn-shadow-lg: rgba(37, 99, 235, 0.25);
+
+  /* ── Dark surfaces ───────────────────────────────────────────────────────── */
+  --surface-dark:        #0b1220;
+  --graph-bg:            #0b1220;
+
+  /* ── Shadows ─────────────────────────────────────────────────────────────── */
+  --shadow-card:         rgba(0, 0, 0, 0.32);
+  --shadow-card-hover:   rgba(0, 0, 0, 0.45);
+  --shadow-header:       rgba(0, 0, 0, 0.35);
+
+  /* ── Success (green) ─────────────────────────────────────────────────────── */
+  --success-color:       #4ade80;
+  --success-bg:          rgba(74, 222, 128, 0.07);
+  --success-bg-strong:   rgba(80, 255, 140, 0.12);
+  --success-border:      rgba(74, 222, 128, 0.35);
+  --success-border-strong: rgba(80, 255, 140, 0.35);
+  --success-text:        #c9ffd8;
+
+  /* ── Error / Danger (red) ────────────────────────────────────────────────── */
+  --error-color:         #f87171;
+  --error-text:          #ffd1d1;
+  --error-bg:            rgba(255, 80, 80, 0.12);
+  --error-border:        rgba(255, 80, 80, 0.35);
+  --error-bg-subtle:     rgba(248, 113, 113, 0.05);
+  --error-border-subtle: rgba(248, 113, 113, 0.25);
+
+  /* ── Logout button ───────────────────────────────────────────────────────── */
+  --logout-bg:           rgba(255, 80, 80, 0.10);
+  --logout-border:       rgba(255, 255, 255, 0.14);
+  --logout-color:        #ffd1d1;
+
+  /* ── Survey banner ───────────────────────────────────────────────────────── */
+  --survey-banner-bg:    rgba(79, 124, 255, 0.08);
+  --survey-banner-border: rgba(79, 124, 255, 0.4);
+
+  /* ── Progress bar ────────────────────────────────────────────────────────── */
+  --progress-fill:       linear-gradient(90deg, #4f7cff, #7c5cff);
+  --progress-track-bg:   rgba(255, 255, 255, 0.08);
+
+  /* ── Survey tabs ─────────────────────────────────────────────────────────── */
+  --tab-active-bg:       rgba(79, 124, 255, 0.18);
+  --tab-active-border:   rgba(79, 124, 255, 0.6);
+  --tab-done-bg:         rgba(74, 222, 128, 0.08);
+  --tab-done-border:     rgba(74, 222, 128, 0.4);
+  --tab-done-color:      #4ade80;
+
+  /* ── Tracker cells (survey progress) ────────────────────────────────────── */
+  --tracker-done-bg:     rgba(74, 222, 128, 0.07);
+  --tracker-done-border: rgba(74, 222, 128, 0.35);
+  --tracker-missing-bg:  rgba(248, 113, 113, 0.05);
+  --tracker-missing-border: rgba(248, 113, 113, 0.25);
+
+  /* ── Tables ──────────────────────────────────────────────────────────────── */
+  --table-head-border:   rgba(155, 183, 255, 0.2);
+  --table-row-border:    rgba(155, 183, 255, 0.08);
+  --nav-border:          rgba(155, 183, 255, 0.1);
+
+  /* ── Likert selected ─────────────────────────────────────────────────────── */
+  --likert-selected-bg:     rgba(79, 124, 255, 0.85);
+  --likert-selected-border: rgba(79, 124, 255, 0.9);
+}
+
+/* Light theme overrides for tokens where dark/light differ meaningfully */
+[data-theme="light"] {
+  --surface-dark:        #e8edf8;
+  --graph-bg:            #e8edf8;
+  --shadow-card:         rgba(0, 0, 0, 0.10);
+  --shadow-card-hover:   rgba(0, 0, 0, 0.18);
+  --shadow-header:       rgba(0, 0, 0, 0.12);
+  --progress-track-bg:   rgba(0, 0, 0, 0.08);
+
+  --tracker-done-bg:     rgba(22, 163, 74, 0.08);
+  --tracker-done-border: rgba(22, 163, 74, 0.35);
+  --tracker-missing-bg:  rgba(220, 38, 38, 0.05);
+  --tracker-missing-border: rgba(220, 38, 38, 0.25);
+
+  --success-color:       #16a34a;
+  --success-bg:          rgba(22, 163, 74, 0.07);
+  --success-text:        #14532d;
+
+  --error-color:         #dc2626;
+  --error-text:          #7f1d1d;
+  --logout-color:        #7f1d1d;
+
+  --tab-active-bg:       rgba(79, 124, 255, 0.12);
+  --tab-done-color:      #16a34a;
+
+  --nav-border:          rgba(79, 124, 255, 0.15);
+  --table-head-border:   rgba(79, 124, 255, 0.2);
+  --table-row-border:    rgba(79, 124, 255, 0.08);
+}

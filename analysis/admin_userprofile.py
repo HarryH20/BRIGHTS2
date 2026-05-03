@@ -130,6 +130,30 @@ def fetch_one(engine, pid):
         ), {"pid": pid}).fetchone()
     return dict(row._mapping) if row else None
 
+def fetch_data(engine, user_id="all"):
+    all_rows = fetch_all_rows(engine)
+
+    if user_id == "all":
+        return {"all_rows": all_rows, "single_row": None, "user_id": None}
+
+    uid = int(user_id)
+
+    with engine.connect() as conn:
+        participant = conn.execute(
+            sqlalchemy.text("SELECT participant_id FROM users WHERE id = :uid"),
+            {"uid": uid}
+        ).fetchone()
+
+    if not participant:
+        raise ValueError("No participant linked to this user")
+
+    single_row = fetch_one(engine, participant.participant_id)
+
+    if single_row is None:
+        raise ValueError("Participant data not found")
+
+    return {"all_rows": all_rows, "single_row": single_row, "user_id": uid}
+
 # ================================================================
 # COUNTING HELPERS
 # ================================================================

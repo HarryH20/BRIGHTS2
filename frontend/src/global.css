@@ -1,7 +1,29 @@
+/* Tailwind v4 entry — must be first */
+@import "tailwindcss";
+
 /* ─────────────────────────────────────────────
    Global interactive polish
    Layered on top of inline styles — additive only
    ───────────────────────────────────────────── */
+
+/* ── Tailwind theme bridge: maps existing CSS vars to Tailwind utilities ── */
+/* This means both style={{ background: 'var(--card-bg)' }} and            */
+/* className="bg-card" work and resolve to the same value.                  */
+@theme inline {
+  --color-card:        var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-header:      var(--header-bg);
+  --color-page:        var(--page-bg);
+  --color-accent:      var(--accent);
+  --color-ghost:       var(--ghost-bg);
+  --color-ghost-border: var(--ghost-border);
+  --color-surface:     var(--surface-subtle);
+  --color-text:        var(--text-primary);
+  --color-text-dim:    var(--text-dim);
+  --color-input:       var(--input-bg);
+  --color-success:     var(--success-color);
+  --color-error:       var(--error-color);
+}
 
 /* ── Theme tokens ──────────────────────────── */
 :root {

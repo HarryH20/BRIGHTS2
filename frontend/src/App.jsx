@@ -9,10 +9,10 @@ import SurveyResults from "./home/SurveyResults.jsx";
 import SurveyAnalysis from "./home/SurveyAnalysis.jsx";
 import GoalPage from "./home/GoalPage.jsx";
 import OverviewPage from "./home/OverviewPage.jsx";
-import GraphsPage from "./home/GraphsPage.jsx";
 import SurveyForm from "./home/SurveyForm.jsx";
 import AdminPage from "./admin/AdminPage.jsx";
 import SurveyWeekPage from "./home/SurveyWeekPage.jsx";
+import AppErrorBoundary from "./components/ErrorBoundary.jsx";
 
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
@@ -64,6 +64,7 @@ export default function App() {
   }
 
   return (
+    <AppErrorBoundary context="page">
     <Routes>
       <Route
         path="/login"
@@ -176,20 +177,13 @@ export default function App() {
             }
         />
 
-        <Route
-            path="/graphs"
-            element={
-                <RequireAuth user={user} checking={checking}>
-                    <GraphsPage user={user} onLogout={handleLogout} />
-                </RequireAuth>
-                }
-            />
-
       <Route
         path="/survey/*"
         element={
           <RequireAuth user={user} checking={checking}>
-            <SurveyForm user={user} onLogout={handleLogout} onSurveyComplete={clearChartCache} />
+            <AppErrorBoundary context="survey">
+              <SurveyForm user={user} onLogout={handleLogout} onSurveyComplete={clearChartCache} />
+            </AppErrorBoundary>
           </RequireAuth>
         }
       />
@@ -219,5 +213,6 @@ export default function App() {
         }
       />
     </Routes>
+    </AppErrorBoundary>
   );
 }

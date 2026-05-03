@@ -128,6 +128,8 @@ function SurveyAnalysisContent({
 
       {loading ? (
         <p style={styles.muted}>Loading…</p>
+      ) : !filteredGoals || filteredGoals.length === 0 ? (
+        <p style={styles.muted}>No data available for this timepoint.</p>
       ) : (
         <table style={styles.table}>
           <thead>

@@ -4,6 +4,9 @@ import RosePlot from "../graphs/RosePlot.jsx";
 import RadarPlot from "../graphs/RadarPlot.jsx";
 import LoadingScreen from "./LoadingScreen.jsx";
 import HomeLayout from "./HomeLayout.jsx";
+import OnboardingModal from "./OnboardingModal.jsx";
+
+const ONBOARDED_KEY = "brights2_onboarded";
 
 const LIKERT = {
   1: "Strongly disagree",
@@ -32,6 +35,7 @@ const TP_WEEK  = { 1: "Week 1", 2: "Week 2", 3: "Week 3", 4: "Week 4", 5: "Week 
 export default function Dashboard({ user, onLogout, chartCache, setChartCache }) {
   const [goalFilter, setGoalFilter] = useState("all");
   const [weekFilter, setWeekFilter] = useState("2-6");
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Initialize from cache if available — avoids re-fetching on navigation
   const [goals, setGoals] = useState(chartCache?.loaded ? chartCache.goals : []);
@@ -50,6 +54,13 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
       .then((d) => {
         setSurveyStatus(d.status);
         setSurveyTimepoint(d.timepoint ?? null);
+        if (
+          d.status === "due" &&
+          d.timepoint === 1 &&
+          !localStorage.getItem(ONBOARDED_KEY)
+        ) {
+          setShowOnboarding(true);
+        }
       })
       .catch(() => {});
 
@@ -131,7 +142,11 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
   if (!ready) return <LoadingScreen status={loadingStatus} />;
 
   return (
-    <HomeLayout 
+    <>
+    {showOnboarding && (
+      <OnboardingModal onClose={() => setShowOnboarding(false)} />
+    )}
+    <HomeLayout
       user={user} 
       onLogout={onLogout} 
       rightSlot={
@@ -329,6 +344,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
         </section>
       </div>
     </HomeLayout>
+    </>
   );
 }
 

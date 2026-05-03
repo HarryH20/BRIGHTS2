@@ -151,32 +151,37 @@ export default function AdminDemographicBarChart({
     setLoading(true);
     setError(null);
 
-    const qs = new URLSearchParams({
-      demo_label: demoLabel,
-      group_val: groupVal,
-      timepoint: String(timepoint),
-      question_key: questionKey,
-    }).toString();
+    const timer = setTimeout(() => {
+      const qs = new URLSearchParams({
+        demo_label: demoLabel,
+        group_val: groupVal,
+        timepoint: String(timepoint),
+        question_key: questionKey,
+      }).toString();
 
-    fetch(`/api/admin/demographic-barchart?${qs}`, {
-      credentials: "include",
-      signal: controller.signal,
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Server error: ${res.status}`);
-        return res.json();
+      fetch(`/api/admin/demographic-barchart?${qs}`, {
+        credentials: "include",
+        signal: controller.signal,
       })
-      .then((fig) => {
-        setFigure(fig);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (err.name === "AbortError") return;
-        setError(err.message);
-        setLoading(false);
-      });
+        .then((res) => {
+          if (!res.ok) throw new Error(`Server error: ${res.status}`);
+          return res.json();
+        })
+        .then((fig) => {
+          setFigure(fig);
+          setLoading(false);
+        })
+        .catch((err) => {
+          if (err.name === "AbortError") return;
+          setError(err.message);
+          setLoading(false);
+        });
+    }, 400);
 
-    return () => controller.abort();
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [demoLabel, groupVal, timepoint, questionKey, prefetchedFigure]);
 
   const layout = {
