@@ -19,7 +19,7 @@ export default function AdminShell({ user, onLogout, children, title, subtitle, 
 
   return (
     <div style={s.shell}>
-      <AdminSidebar user={user} onLogout={onLogout} />
+      <AdminSidebar user={user} onLogout={onLogout} researcherRole={user?.researcher_role ?? null} />
 
       <div style={s.content}>
         <AdminHeader title={title} subtitle={subtitle} actions={actions} />

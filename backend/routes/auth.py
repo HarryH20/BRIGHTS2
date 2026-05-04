@@ -153,6 +153,76 @@ def admin_required(f):
     return decorated_function
 
 
+ROLE_ALLOWED_ROUTES = {
+    'pi': 'all',
+    'research_assistant': [
+        'GET /api/admin/study',
+        'GET /api/admin/rounds',
+        'GET /api/admin/stats',
+        'GET /api/admin/users',
+        'GET /api/admin/roseplot',
+        'GET /api/admin/counts-demographics',
+        'GET /api/admin/demographic-barchart',
+        'GET /api/admin/attrition-funnel',
+        'GET /api/admin/alluvial',
+        'GET /api/admin/linguistic-markers',
+        'GET /api/admin/wordcloud',
+        'GET /api/admin/diverging',
+        'GET /api/admin/quality-flags',
+        'POST /api/admin/participants',
+        'GET /api/admin/participants',
+    ],
+    'data_manager': [
+        'GET /api/admin/study',
+        'GET /api/admin/rounds',
+        'GET /api/admin/stats',
+        'GET /api/admin/export/excel',
+        'GET /api/admin/quality-flags',
+        'GET /api/admin/quality-flags/summary',
+    ],
+    'observer': [
+        'GET /api/admin/study',
+        'GET /api/admin/rounds',
+        'GET /api/admin/stats',
+        'GET /api/admin/roseplot',
+        'GET /api/admin/counts-demographics',
+        'GET /api/admin/attrition-funnel',
+    ],
+}
+
+
+def admin_or_researcher_required(f):
+    """
+    Allows both:
+    - users with role='admin' in users table
+    - users with any active researcher_role
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('user_id'):
+            return jsonify({'error': 'Auth required'}), 401
+        user = db.session.get(User, session['user_id'])
+        if not user:
+            return jsonify({'error': 'User not found'}), 401
+
+        # Full admin bypasses everything
+        if user.role == 'admin':
+            return f(*args, **kwargs)
+
+        # Check researcher role
+        researcher_role = ResearcherRole.query.filter_by(
+            user_id=user.id,
+            revoked_at=None
+        ).first()
+        if not researcher_role:
+            return jsonify({'error': 'Access denied'}), 403
+
+        # Store role in g for downstream permission checks
+        g.researcher_role = researcher_role.role
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # =============================================================================
 # RESEARCHER RBAC
 # =============================================================================

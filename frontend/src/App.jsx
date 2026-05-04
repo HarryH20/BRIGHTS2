@@ -29,6 +29,7 @@ import AdminExportPage from "./admin/pages/AdminExportPage.jsx";
 import AdminResearchersPage from "./admin/pages/AdminResearchersPage.jsx";
 import AdminConditionsPage from "./admin/pages/AdminConditionsPage.jsx";
 import AdminQualityPage from "./admin/pages/AdminQualityPage.jsx";
+import AdminAccessRestrictedPage from "./admin/pages/AdminAccessRestrictedPage.jsx";
 import ResearcherJoinPage from "./auth/ResearcherJoinPage.jsx";
 import JoinStudyPage from "./auth/JoinStudyPage.jsx";
 
@@ -44,6 +45,17 @@ function RequireAdmin({ user, checking, children }) {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "admin" && !user.is_researcher) return <Navigate to="/dashboard" replace />;
   return children;
+}
+
+function RoleRequireAdmin({ user, checking, onLogout, children }) {
+  if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role === "admin") return children;
+  if (user.researcher_role === "pi") return children;
+  if (user.is_researcher) return (
+    <AdminAccessRestrictedPage user={user} onLogout={onLogout} roleName={user.researcher_role} />
+  );
+  return <Navigate to="/login" replace />;
 }
 
 const EMPTY_CHART_CACHE = { goals: [], roseFigure: null, radarFigures: {}, loaded: false };
@@ -217,12 +229,12 @@ export default function App() {
         <Route path="/admin/alluvial" element={<RequireAdmin user={user} checking={checking}><AdminAlluvialPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
         <Route path="/admin/questions" element={<RequireAdmin user={user} checking={checking}><AdminQuestionsPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
         <Route path="/admin/stats" element={<RequireAdmin user={user} checking={checking}><AdminStatsPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
-        <Route path="/admin/audit" element={<RequireAdmin user={user} checking={checking}><AdminAuditPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
+        <Route path="/admin/audit" element={<RoleRequireAdmin user={user} checking={checking} onLogout={handleLogout}><AdminAuditPage user={user} onLogout={handleLogout} /></RoleRequireAdmin>} />
         <Route path="/admin/sessions" element={<RequireAdmin user={user} checking={checking}><AdminSessionsPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
         <Route path="/admin/study" element={<RequireAdmin user={user} checking={checking}><AdminStudyPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
         <Route path="/admin/export" element={<RequireAdmin user={user} checking={checking}><AdminExportPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
-        <Route path="/admin/researchers" element={<RequireAdmin user={user} checking={checking}><AdminResearchersPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
-        <Route path="/admin/conditions" element={<RequireAdmin user={user} checking={checking}><AdminConditionsPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
+        <Route path="/admin/researchers" element={<RoleRequireAdmin user={user} checking={checking} onLogout={handleLogout}><AdminResearchersPage user={user} onLogout={handleLogout} /></RoleRequireAdmin>} />
+        <Route path="/admin/conditions" element={<RoleRequireAdmin user={user} checking={checking} onLogout={handleLogout}><AdminConditionsPage user={user} onLogout={handleLogout} /></RoleRequireAdmin>} />
         <Route path="/admin/quality" element={<RequireAdmin user={user} checking={checking}><AdminQualityPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
 
         {/* ── Catch-all ───────────────────────────────────────────────────── */}

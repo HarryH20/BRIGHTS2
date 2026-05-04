@@ -22,7 +22,7 @@ from models import (
     SurveySubmission, TemplateQuestion, User, db,
     ConsentForm, ConsentFormRevision, ParticipantConsent,
 )
-from routes.auth import admin_required
+from routes.auth import admin_required, admin_or_researcher_required
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def _build_public_url(path):
     return f"{base}/{path.lstrip('/')}"
 
 @admin_bp.route("/roseplot", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_roseplot():
     """
     GET /api/admin/roseplot?user_id=all|<id>&goal_id=all|1|2|3&weeks=all|2-6|4-6|...
@@ -77,7 +77,7 @@ def admin_roseplot():
         return jsonify({"error": "Failed to generate admin visualization"}), 500
 
 @admin_bp.route("/divergingstackedbarchart", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_divergingstackedbarchart():
     """
     GET /api/admin/divergingstackedbarchart?user_id=all|<id>&goals=1,2,3&weeks=2,3,4,5,6
@@ -103,7 +103,7 @@ def admin_divergingstackedbarchart():
 # GET /api/admin/stats — Dashboard overview cards
 # =============================================================================
 @admin_bp.route("/stats", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def stats():
     now = datetime.now(timezone.utc)
     since_24h = now - timedelta(hours=24)
@@ -240,7 +240,7 @@ def sessions():
 # GET /api/admin/users — User list with status
 # =============================================================================
 @admin_bp.route("/users", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def users():
     all_users = User.query.order_by(User.id).all()
 
@@ -265,7 +265,7 @@ def users():
 # GET /api/admin/stats/activity — Time-series data for charts
 # =============================================================================
 @admin_bp.route("/stats/activity", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def stats_activity():
     days = request.args.get("days", 7, type=int)
     days = min(days, 90)
@@ -324,7 +324,7 @@ def admin_ageplot():
 
 
 @admin_bp.route("/alluvial", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_alluvial():
     """
     GET /api/admin/alluvial
@@ -341,7 +341,7 @@ def admin_alluvial():
 
 
 @admin_bp.route("/linguisticmarkersplot", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_linguisticmarkersplot():
     """
     GET /api/admin/linguisticmarkersplot
@@ -358,7 +358,7 @@ def admin_linguisticmarkersplot():
 
 
 @admin_bp.route("/linguisticmarkerswordcloud", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_linguisticmarkerswordcloud():
     """
     GET /api/admin/linguisticmarkerswordcloud
@@ -377,7 +377,7 @@ def admin_linguisticmarkerswordcloud():
 # GET /api/admin/demographics — User Profile (per-user demographics)
 # =============================================================================
 @admin_bp.route("/demographics", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_userprofile():
     try:
         profile_mod = importlib.import_module("analysis.admin_userprofile")
@@ -391,7 +391,7 @@ def admin_userprofile():
         return jsonify({"error": str(e)}), 500
 
 @admin_bp.route("/demographic-barchart", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_demographic_barchart():
     """
     GET /api/admin/demographic-barchart?demo_label=Gender&group_val=Female&timepoint=1&question_key=Q1
@@ -414,7 +414,7 @@ def admin_demographic_barchart():
         return jsonify({"error": "Failed to generate admin visualization"}), 500
 
 @admin_bp.route("/counts-demographics", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_counts_demographics():
     """
     GET /api/admin/counts-demographics?demo_label=Gender
@@ -434,7 +434,7 @@ def admin_counts_demographics():
         return jsonify({"error": "Failed to generate admin visualization"}), 500
 
 @admin_bp.route("/attrition-funnel", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def admin_attrition_funnel():
     """
     GET /api/admin/attrition-funnel?demo_key=Gender&grp_name=Female
@@ -460,7 +460,7 @@ def admin_attrition_funnel():
 # =============================================================================
 
 @admin_bp.route("/study", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def get_study():
     """GET /api/admin/study — brights2 study metadata for admin UI."""
     study = Study.query.filter_by(study_key="brights2").first()
@@ -490,7 +490,7 @@ _VALID_ROUND_TRANSITIONS = {
 
 
 @admin_bp.route("/rounds", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def get_rounds():
     """GET /api/admin/rounds — all rounds for the brights2 study, newest first."""
     study = Study.query.filter_by(study_key="brights2").first()
@@ -1835,7 +1835,7 @@ def _flag_to_dict(flag):
 
 
 @admin_bp.route("/quality-flags/summary", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def quality_flags_summary():
     """GET /api/admin/quality-flags/summary?round_id=<id>"""
     round_id = request.args.get("round_id", type=int)
@@ -1870,7 +1870,7 @@ def quality_flags_summary():
 
 
 @admin_bp.route("/quality-flags", methods=["GET"])
-@admin_required
+@admin_or_researcher_required
 def get_quality_flags():
     """GET /api/admin/quality-flags?round_id=<id>&severity=&flag_type=&is_resolved=false&user_id=&offset=0"""
     round_id = request.args.get("round_id", type=int)

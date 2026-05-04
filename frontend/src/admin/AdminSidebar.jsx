@@ -81,7 +81,25 @@ const tt = {
   boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
 };
 
-export default function AdminSidebar({ user, onLogout }) {
+const ROLE_NAV = {
+  pi: 'all',
+  research_assistant: [
+    '/admin', '/admin/users', '/admin/goals',
+    '/admin/demographics', '/admin/linguistics',
+    '/admin/alluvial', '/admin/quality',
+    '/admin/stats',
+  ],
+  data_manager: [
+    '/admin', '/admin/stats', '/admin/export',
+    '/admin/quality',
+  ],
+  observer: [
+    '/admin', '/admin/stats',
+    '/admin/demographics',
+  ],
+};
+
+export default function AdminSidebar({ user, onLogout, researcherRole }) {
   const { pathname } = useLocation();
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -100,6 +118,13 @@ export default function AdminSidebar({ user, onLogout }) {
   function isActive(item) {
     if (item.exact) return pathname === item.to;
     return pathname === item.to || pathname.startsWith(item.to + "/");
+  }
+
+  function canSee(path) {
+    if (!researcherRole) return true;
+    const allowed = ROLE_NAV[researcherRole];
+    if (allowed === 'all') return true;
+    return allowed?.includes(path) ?? false;
   }
 
   const w = collapsed ? "var(--sidebar-width-icon)" : "var(--sidebar-width)";
@@ -137,7 +162,7 @@ export default function AdminSidebar({ user, onLogout }) {
             {group.label && !collapsed && (
               <div style={s.groupLabel}>{group.label}</div>
             )}
-            {group.items.map((item) => {
+            {group.items.filter((item) => canSee(item.to)).map((item) => {
               const active = isActive(item);
               const Icon = item.icon;
               return (
@@ -169,9 +194,27 @@ export default function AdminSidebar({ user, onLogout }) {
             {(user?.display_name || user?.username || "A")[0].toUpperCase()}
           </div>
           {!collapsed && (
-            <span style={s.userName}>
-              {user?.display_name || user?.username || "Admin"}
-            </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 2, overflow: "hidden" }}>
+              <span style={s.userName}>
+                {user?.display_name || user?.username || "Admin"}
+              </span>
+              {researcherRole && (
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  color: "var(--shell-accent)",
+                  background: "var(--sidebar-active-bg)",
+                  borderRadius: 4,
+                  padding: "2px 6px",
+                  display: "inline-block",
+                  alignSelf: "flex-start",
+                }}>
+                  {researcherRole.replace("_", " ")}
+                </span>
+              )}
+            </div>
           )}
         </div>
 

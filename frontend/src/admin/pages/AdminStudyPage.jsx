@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { AlertCircle, CheckCircle } from "lucide-react";
 import AdminShell from "../AdminShell.jsx";
 import { adminStyles as s } from "../adminStyles.js";
 
@@ -529,7 +530,7 @@ function NotifySection({ studyId }) {
   const [notifType, setNotifType] = useState("survey_reminder");
   const [bodyOverride, setBodyOverride] = useState("");
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState(null);
+  const [sendResult, setSendResult] = useState(null);
 
   useEffect(() => {
     if (!studyId) return;
@@ -549,7 +550,7 @@ function NotifySection({ studyId }) {
     if (!selectedRound) return;
     if (!window.confirm(`Send "${notifType}" notification to all enrolled participants in this round?`)) return;
     setSending(true);
-    setResult(null);
+    setSendResult(null);
     try {
       const body = { notif_type: notifType };
       if (bodyOverride.trim()) body.message = bodyOverride.trim();
@@ -561,13 +562,13 @@ function NotifySection({ studyId }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setResult({ ok: false, text: data.error || "Send failed." });
+        setSendResult({ error: data.error || "Send failed." });
       } else {
-        setResult({ ok: true, text: `Sent to ${data.sent ?? "?"} participant(s).` });
+        setSendResult({ sent: data.sent, skipped: data.skipped ?? 0 });
         setBodyOverride("");
       }
     } catch {
-      setResult({ ok: false, text: "Network error." });
+      setSendResult({ error: "Network error." });
     } finally {
       setSending(false);
     }
@@ -587,7 +588,7 @@ function NotifySection({ studyId }) {
             Round
             <select
               value={selectedRound}
-              onChange={(e) => setSelectedRound(e.target.value)}
+              onChange={(e) => { setSelectedRound(e.target.value); setSendResult(null); }}
               style={fieldInput}
               required
             >
@@ -602,7 +603,7 @@ function NotifySection({ studyId }) {
             Notification Type
             <select
               value={notifType}
-              onChange={(e) => setNotifType(e.target.value)}
+              onChange={(e) => { setNotifType(e.target.value); setSendResult(null); }}
               style={fieldInput}
             >
               {NOTIF_TYPES.map((t) => (
@@ -615,15 +616,31 @@ function NotifySection({ studyId }) {
           Body Override (optional — leave blank to use approved template copy)
           <textarea
             value={bodyOverride}
-            onChange={(e) => setBodyOverride(e.target.value)}
+            onChange={(e) => { setBodyOverride(e.target.value); setSendResult(null); }}
             placeholder="Custom message body…"
             style={{ ...fieldInput, minHeight: 72, resize: "vertical" }}
             maxLength={500}
           />
         </label>
-        {result && (
-          <div style={{ fontSize: 13, color: result.ok ? "#6ee7b7" : "#fca5a5", fontWeight: 600 }}>
-            {result.text}
+        {sendResult && (
+          <div style={{
+            marginTop: 4,
+            padding: "12px 16px",
+            borderRadius: 10,
+            background: sendResult.error ? "rgba(242,107,123,0.08)" : "rgba(79,209,197,0.08)",
+            border: `1px solid ${sendResult.error ? "var(--error-color)" : "var(--shell-teal)"}`,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            fontSize: 13,
+            color: sendResult.error ? "var(--error-color)" : "var(--shell-teal)",
+          }}>
+            {sendResult.error ? <AlertCircle size={16} /> : <CheckCircle size={16} />}
+            <span>
+              {sendResult.error
+                ? sendResult.error
+                : `Sent to ${sendResult.sent} participants.${sendResult.skipped > 0 ? ` ${sendResult.skipped} skipped (reminders disabled).` : ""}`}
+            </span>
           </div>
         )}
         <button type="submit" disabled={sending || !selectedRound} style={submitBtn}>
