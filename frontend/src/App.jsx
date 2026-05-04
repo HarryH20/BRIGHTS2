@@ -35,14 +35,14 @@ import JoinStudyPage from "./auth/JoinStudyPage.jsx";
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role === "admin") return <Navigate to="/admin" replace />;
+  if (user.role === "admin" || user.is_researcher) return <Navigate to="/admin" replace />;
   return children;
 }
 
 function RequireAdmin({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "admin") return <Navigate to="/dashboard" replace />;
+  if (user.role !== "admin" && !user.is_researcher) return <Navigate to="/dashboard" replace />;
   return children;
 }
 
@@ -93,13 +93,13 @@ export default function App() {
             checking ? (
               <div style={{ padding: 20 }}>Loading...</div>
             ) : user ? (
-              <Navigate to={user.role === "admin" ? "/admin" : "/dashboard"} replace />
+              <Navigate to={(user.role === "admin" || user.is_researcher) ? "/admin" : "/dashboard"} replace />
             ) : (
               <div style={{ padding: 20 }}>
                 <Login
                   onLogin={(u) => {
                     setUser(u);
-                    navigate(u.role === "admin" ? "/admin" : "/dashboard", { replace: true });
+                    navigate((u.role === "admin" || u.is_researcher) ? "/admin" : "/dashboard", { replace: true });
                   }}
                   onGoToRegister={() => navigate("/register")}
                 />
@@ -232,7 +232,7 @@ export default function App() {
             checking ? (
               <div style={{ padding: 20 }}>Loading...</div>
             ) : user ? (
-              <Navigate to={user.role === "admin" ? "/admin" : "/dashboard"} replace />
+              <Navigate to={(user.role === "admin" || user.is_researcher) ? "/admin" : "/dashboard"} replace />
             ) : (
               <Navigate to="/login" replace />
             )

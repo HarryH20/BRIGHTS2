@@ -1700,9 +1700,9 @@ def send_notifications(round_id):
 
     enrollments = Enrollment.query.filter_by(round_id=round_id, status='active').all()
     if not enrollments:
-        return jsonify({"sent": 0, "skipped": 0}), 200
+        return jsonify({"status": "sent", "sent": 0, "skipped": 0}), 200
 
-    # Bulk-fetch reminder preferences to avoid N queries
+    # Bulk-fetch reminder preferences once (not per-batch)
     user_ids = [e.user_id for e in enrollments]
     disabled_reminder_users = set()
     if notif_type == 'survey_reminder':
@@ -1712,64 +1712,82 @@ def send_notifications(round_id):
         ).all()
         disabled_reminder_users = {p.user_id for p in prefs}
 
-    # Build enrollment condition lookup (already fetched — no extra query)
     condition_by_user = {e.user_id: e.condition_label for e in enrollments}
 
-    # Build all Notification objects (no session.add in loop)
-    notifications_list = []
-    skipped = 0
-    for enrollment in enrollments:
-        if enrollment.user_id in disabled_reminder_users:
-            skipped += 1
-            continue
-        notifications_list.append(Notification(
-            user_id=enrollment.user_id,
-            round_id=round_id,
-            type=notif_type,
-            title=title,
-            body=body,
-            action_url=action_url,
-            is_read=False,
-            created_at=now,
-        ))
-
-    if not notifications_list:
-        return jsonify({"sent": 0, "skipped": skipped}), 200
-
-    try:
-        # add_all + flush assigns IDs in a single batch roundtrip
-        db.session.add_all(notifications_list)
-        db.session.flush()
-
-        # Build delivery logs with the now-available IDs
-        delivery_logs = [
-            NotificationDeliveryLog(
-                notification_id=n.id,
-                user_id=n.user_id,
-                round_id=round_id,
-                condition_label=condition_by_user.get(n.user_id),
-                notification_type=notif_type,
-                delivered_at=now,
-            )
-            for n in notifications_list
-        ]
-        db.session.add_all(delivery_logs)
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        logger.error("Failed to send notifications for round=%s", round_id, exc_info=True)
-        return jsonify({"error": "Failed to send notifications"}), 500
-
-    # Push SSE only to users who have an active stream connection
     try:
         from routes.auth import _sse_subscribers, _push_notification, _notif_dict
-        for n in notifications_list:
-            if n.user_id in _sse_subscribers:
-                _push_notification(n.user_id, _notif_dict(n))
+        _sse_ok = True
     except Exception:
-        pass
+        _sse_ok = False
 
-    return jsonify({"sent": len(notifications_list), "skipped": skipped}), 200
+    BATCH_SIZE = 50
+    sent = 0
+    skipped = 0
+
+    for i in range(0, len(enrollments), BATCH_SIZE):
+        chunk = enrollments[i:i + BATCH_SIZE]
+        notif_objects = []
+
+        for enrollment in chunk:
+            if enrollment.user_id in disabled_reminder_users:
+                skipped += 1
+                continue
+            notif_objects.append(Notification(
+                user_id=enrollment.user_id,
+                round_id=round_id,
+                type=notif_type,
+                title=title,
+                body=body,
+                action_url=action_url,
+                is_read=False,
+                created_at=now,
+            ))
+
+        if not notif_objects:
+            continue
+
+        try:
+            db.session.add_all(notif_objects)
+            db.session.flush()  # assigns IDs without full commit
+
+            log_objects = [
+                NotificationDeliveryLog(
+                    notification_id=n.id,
+                    user_id=n.user_id,
+                    round_id=round_id,
+                    condition_label=condition_by_user.get(n.user_id),
+                    notification_type=notif_type,
+                    delivered_at=now,
+                )
+                for n in notif_objects
+            ]
+            db.session.add_all(log_objects)
+            db.session.commit()
+            sent += len(notif_objects)
+
+            if _sse_ok:
+                for n in notif_objects:
+                    if n.user_id in _sse_subscribers:
+                        try:
+                            _push_notification(n.user_id, _notif_dict(n))
+                        except Exception:
+                            pass
+
+            db.session.expire_all()
+
+        except Exception:
+            db.session.rollback()
+            logger.error(
+                "Failed to send notifications batch round=%s offset=%s",
+                round_id, i, exc_info=True,
+            )
+            return jsonify({
+                "error": "Failed to send notifications",
+                "sent": sent,
+                "skipped": skipped,
+            }), 500
+
+    return jsonify({"status": "sent", "sent": sent, "skipped": skipped}), 200
 
 
 # =============================================================================

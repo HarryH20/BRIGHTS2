@@ -8,6 +8,7 @@ import SurveyHeroCard from "./SurveyHeroCard.jsx";
 import OnboardingModal from "./OnboardingModal.jsx";
 import SkeletonCard from "../components/SkeletonCard.jsx";
 import SkeletonGoalCard from "../components/SkeletonGoalCard.jsx";
+import { useSurveyInfo } from "./SurveyContext.jsx";
 import { Target, ClipboardList } from "lucide-react";
 
 const ONBOARDED_KEY = "brights2_onboarded";
@@ -18,6 +19,155 @@ function greeting(name) {
   const h = new Date().getHours();
   const time = h < 12 ? "morning" : h < 17 ? "afternoon" : "evening";
   return `Good ${time}, ${name}!`;
+}
+
+function DashboardContent({
+  displayName, goals, radarFigures, goalsLoaded, filteredRoseFigure, roseFigure,
+  goalFilter, setGoalFilter, weekFilter, setWeekFilter, surveyCompletion, navigate,
+  setShowOnboarding,
+}) {
+  const surveyInfo = useSurveyInfo();
+  const surveyStatus = surveyInfo?.status ?? null;
+  const surveyTimepoint = surveyInfo?.timepoint ?? null;
+
+  useEffect(() => {
+    if (
+      surveyInfo?.status === "due" &&
+      surveyInfo?.timepoint === 1 &&
+      !localStorage.getItem(ONBOARDED_KEY)
+    ) {
+      setShowOnboarding(true);
+    }
+  }, [surveyInfo, setShowOnboarding]);
+
+  const colSpan = goals.length <= 1 ? 12 : goals.length === 2 ? 6 : 4;
+  const surveysCompleted = surveyCompletion
+    ? surveyCompletion.filter((t) => t.completed).length
+    : 0;
+  const processInsight = (() => {
+    if (!surveyCompletion) return null;
+    if (surveysCompleted >= 2) {
+      const cohortApprox = Math.max(500, 904 - surveysCompleted * 40);
+      return `${surveysCompleted} of 6 surveys complete. ${cohortApprox}+ participants are tracking goals alongside you.`;
+    }
+    if (surveysCompleted === 1) {
+      return "You've set your goals. Check back next week to see how you're tracking.";
+    }
+    return null;
+  })();
+
+  if (surveyStatus === "not_enrolled" || surveyStatus === "round_closed") {
+    return (
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", minHeight: "60vh", textAlign: "center", padding: "40px 24px",
+      }}>
+        <ClipboardList size={48} style={{ opacity: 0.3, color: "var(--shell-text-muted)" }} />
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: "var(--shell-text)", marginTop: 16, marginBottom: 8 }}>
+          {surveyStatus === "not_enrolled" ? "Not currently enrolled" : "This study round has ended"}
+        </h2>
+        <p style={{ fontSize: 15, color: "var(--shell-text-secondary)", maxWidth: 400, lineHeight: 1.6, margin: 0 }}>
+          {surveyStatus === "not_enrolled"
+            ? "You are not enrolled in an active study. If you believe this is an error, contact your study coordinator."
+            : "Thank you for your participation. Your data has been saved."}
+        </p>
+        {surveyStatus === "round_closed" && (
+          <Link to="/overview" style={styles.ctaLink}>View your results →</Link>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.greeting}>{greeting(displayName)}</div>
+
+      {surveyStatus && (
+        <div style={styles.section}>
+          <SurveyHeroCard
+            status={surveyStatus}
+            timepoint={surveyTimepoint}
+            nextUnlocksAt={surveyInfo?.next_unlocks_at ?? surveyInfo?.unlocks_at}
+            onStartSurvey={() => navigate("/survey")}
+          />
+        </div>
+      )}
+
+      {surveyCompletion && (
+        <div style={styles.section}>
+          <div style={styles.sectionLabel}>Your 6-Week Journey</div>
+          <JourneyPath surveyCompletion={surveyCompletion} currentTimepoint={surveyTimepoint} />
+        </div>
+      )}
+
+      <div style={styles.section}>
+        <div style={styles.sectionLabel}>Your Goals</div>
+
+        {!goalsLoaded && (
+          <div style={{ ...styles.goalsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={styles.skeletonWrap}><SkeletonGoalCard /></div>
+            ))}
+          </div>
+        )}
+
+        {goalsLoaded && goals.length === 0 && (
+          <div style={styles.emptyCard}>
+            <Target size={40} style={{ opacity: 0.3, marginBottom: 12, color: "var(--shell-text-muted)" }} />
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: "var(--shell-text)" }}>No goals yet</div>
+            <p style={{ fontSize: 14, color: "var(--shell-text-secondary)", margin: 0, maxWidth: 280 }}>
+              Complete your Week 1 survey to set up your goals and start tracking your progress.
+            </p>
+            {surveyStatus === "due" && (
+              <Link to="/survey" style={styles.ctaLink}>Take the Week 1 Survey →</Link>
+            )}
+          </div>
+        )}
+
+        {goalsLoaded && goals.length > 0 && (
+          <div style={styles.goalsGrid}>
+            {goals.map((g, idx) => (
+              <GoalCard key={g.goal_id} goal={g} idx={idx} radarFigure={radarFigures[idx]} colSpan={colSpan} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={styles.section}>
+        <div style={styles.sectionLabel}>Progress Overview</div>
+        <div style={styles.chartCard}>
+          <div style={styles.filtersRow} className="filtersRowMobile">
+            <span style={{ fontSize: 13, color: "var(--shell-text-muted)" }}>Filter:</span>
+            <select value={goalFilter} onChange={(e) => setGoalFilter(e.target.value)} style={styles.select}>
+              <option value="all">All Goals</option>
+              {goals.map((g) => (
+                <option key={g.goal_id} value={String(g.goal_id)}>
+                  {g.text.length > 24 ? g.text.slice(0, 24) + "…" : g.text}
+                </option>
+              ))}
+            </select>
+            <select value={weekFilter} onChange={(e) => setWeekFilter(e.target.value)} style={styles.select}>
+              <option value="all">All Weeks</option>
+              <option value="2-6">Week 2–6</option>
+              <option value="3-6">Week 3–6</option>
+              <option value="4-6">Week 4–6</option>
+              <option value="5-6">Week 5–6</option>
+            </select>
+            <Link to="/overview" style={styles.overviewLink}>Open full view →</Link>
+          </div>
+          <div style={styles.chartBox}>
+            {!filteredRoseFigure && !goalsLoaded ? (
+              <SkeletonCard height={380} label="Loading overview chart..." />
+            ) : (
+              <RosePlot figure={filteredRoseFigure || roseFigure} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {processInsight && <p style={styles.insight}>{processInsight}</p>}
+    </div>
+  );
 }
 
 export default function Dashboard({ user, onLogout, chartCache, setChartCache }) {
@@ -34,28 +184,9 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
   const [ready, setReady] = useState(chartCache?.loaded ?? false);
   const [goalsLoaded, setGoalsLoaded] = useState(chartCache?.loaded ?? false);
   const [loadingStatus, setLoadingStatus] = useState("Loading your goals...");
-  const [surveyStatus, setSurveyStatus] = useState(null);   // "due" | "locked" | "complete" | null
-  const [surveyTimepoint, setSurveyTimepoint] = useState(null);
-  const [surveyApiData, setSurveyApiData] = useState(null); // full /api/survey/next response
-  const [surveyCompletion, setSurveyCompletion] = useState(null); // array of 6 timepoint statuses
+  const [surveyCompletion, setSurveyCompletion] = useState(null);
 
   useEffect(() => {
-    fetch("/api/survey/next", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => {
-        setSurveyStatus(d.status);
-        setSurveyTimepoint(d.timepoint ?? null);
-        setSurveyApiData(d);
-        if (
-          d.status === "due" &&
-          d.timepoint === 1 &&
-          !localStorage.getItem(ONBOARDED_KEY)
-        ) {
-          setShowOnboarding(true);
-        }
-      })
-      .catch(() => {});
-
     fetch("/api/survey/status", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => setSurveyCompletion(d.timepoints ?? null))
@@ -122,25 +253,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
       .catch(() => {});
   }, [goalFilter, weekFilter, ready]); // eslint-disable-line
 
-  const colSpan = goals.length <= 1 ? 12 : goals.length === 2 ? 6 : 4;
-
-  const surveysCompleted = surveyCompletion
-    ? surveyCompletion.filter((t) => t.completed).length
-    : 0;
-
   const displayName = user?.display_name || user?.username || "there";
-
-  const processInsight = (() => {
-    if (!surveyCompletion) return null;
-    if (surveysCompleted >= 2) {
-      const cohortApprox = Math.max(500, 904 - surveysCompleted * 40);
-      return `${surveysCompleted} of 6 surveys complete. ${cohortApprox}+ participants are tracking goals alongside you.`;
-    }
-    if (surveysCompleted === 1) {
-      return "You've set your goals. Check back next week to see how you're tracking.";
-    }
-    return null;
-  })();
 
   return (
     <>
@@ -148,170 +261,21 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
         <OnboardingModal onClose={() => setShowOnboarding(false)} />
       )}
       <ParticipantShell user={user} onLogout={onLogout}>
-        {(surveyStatus === "not_enrolled" || surveyStatus === "round_closed") ? (
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: "60vh",
-            textAlign: "center",
-            padding: "40px 24px",
-          }}>
-            <ClipboardList size={48} style={{ opacity: 0.3, color: "var(--shell-text-muted)" }} />
-            <h2 style={{
-              fontSize: 22,
-              fontWeight: 800,
-              color: "var(--shell-text)",
-              marginTop: 16,
-              marginBottom: 8,
-            }}>
-              {surveyStatus === "not_enrolled"
-                ? "Not currently enrolled"
-                : "This study round has ended"}
-            </h2>
-            <p style={{
-              fontSize: 15,
-              color: "var(--shell-text-secondary)",
-              maxWidth: 400,
-              lineHeight: 1.6,
-              margin: 0,
-            }}>
-              {surveyStatus === "not_enrolled"
-                ? "You are not enrolled in an active study. If you believe this is an error, contact your study coordinator."
-                : "Thank you for your participation. Your data has been saved."}
-            </p>
-            {surveyStatus === "round_closed" && (
-              <Link to="/overview" style={styles.ctaLink}>
-                View your results →
-              </Link>
-            )}
-          </div>
-        ) : (
-        <div style={styles.page}>
-
-          {/* 1. Greeting */}
-          <div style={styles.greeting}>{greeting(displayName)}</div>
-
-          {/* 2. Survey hero card */}
-          {surveyStatus && (
-            <div style={styles.section}>
-              <SurveyHeroCard
-                status={surveyStatus}
-                timepoint={surveyTimepoint}
-                nextUnlocksAt={surveyApiData?.next_unlocks_at ?? surveyApiData?.unlocks_at}
-                onStartSurvey={() => navigate("/survey")}
-              />
-            </div>
-          )}
-
-          {/* 3. Journey path */}
-          {surveyCompletion && (
-            <div style={styles.section}>
-              <div style={styles.sectionLabel}>Your 6-Week Journey</div>
-              <JourneyPath
-                surveyCompletion={surveyCompletion}
-                currentTimepoint={surveyTimepoint}
-              />
-            </div>
-          )}
-
-          {/* 4. Goal cards */}
-          <div style={styles.section}>
-            <div style={styles.sectionLabel}>Your Goals</div>
-
-            {/* Skeletons while loading */}
-            {!goalsLoaded && (
-              <div style={{ ...styles.goalsGrid, gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))" }}>
-                {[0, 1, 2].map(i => (
-                  <div key={i} style={styles.skeletonWrap}>
-                    <SkeletonGoalCard />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {goalsLoaded && goals.length === 0 && (
-              <div style={styles.emptyCard}>
-                <Target size={40} style={{ opacity: 0.3, marginBottom: 12, color: "var(--shell-text-muted)" }} />
-                <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: "var(--shell-text)" }}>
-                  No goals yet
-                </div>
-                <p style={{ fontSize: 14, color: "var(--shell-text-secondary)", margin: 0, maxWidth: 280 }}>
-                  Complete your Week 1 survey to set up your goals and start tracking your progress.
-                </p>
-                {surveyStatus === "due" && (
-                  <Link to="/survey" style={styles.ctaLink}>
-                    Take the Week 1 Survey →
-                  </Link>
-                )}
-              </div>
-            )}
-
-            {goalsLoaded && goals.length > 0 && (
-              <div style={styles.goalsGrid}>
-                {goals.map((g, idx) => (
-                  <GoalCard
-                    key={g.goal_id}
-                    goal={g}
-                    idx={idx}
-                    radarFigure={radarFigures[idx]}
-                    colSpan={colSpan}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 5. Overview chart */}
-          <div style={styles.section}>
-            <div style={styles.sectionLabel}>Progress Overview</div>
-            <div style={styles.chartCard}>
-              <div style={styles.filtersRow} className="filtersRowMobile">
-                <span style={{ fontSize: 13, color: "var(--shell-text-muted)" }}>
-                  Filter:
-                </span>
-                <select
-                  value={goalFilter}
-                  onChange={(e) => setGoalFilter(e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="all">All Goals</option>
-                  {goals.map((g) => (
-                    <option key={g.goal_id} value={String(g.goal_id)}>
-                      {g.text.length > 24 ? g.text.slice(0, 24) + "…" : g.text}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={weekFilter}
-                  onChange={(e) => setWeekFilter(e.target.value)}
-                  style={styles.select}
-                >
-                  <option value="all">All Weeks</option>
-                  <option value="2-6">Week 2–6</option>
-                  <option value="3-6">Week 3–6</option>
-                  <option value="4-6">Week 4–6</option>
-                  <option value="5-6">Week 5–6</option>
-                </select>
-                <Link to="/overview" style={styles.overviewLink}>Open full view →</Link>
-              </div>
-              <div style={styles.chartBox}>
-                {!filteredRoseFigure && !goalsLoaded ? (
-                  <SkeletonCard height={380} label="Loading overview chart..." />
-                ) : (
-                  <RosePlot figure={filteredRoseFigure || roseFigure} />
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* 6. Process-only insight */}
-          {processInsight && (
-            <p style={styles.insight}>{processInsight}</p>
-          )}
-        </div>
-        )}
+        <DashboardContent
+          displayName={displayName}
+          goals={goals}
+          radarFigures={radarFigures}
+          goalsLoaded={goalsLoaded}
+          filteredRoseFigure={filteredRoseFigure}
+          roseFigure={roseFigure}
+          goalFilter={goalFilter}
+          setGoalFilter={setGoalFilter}
+          weekFilter={weekFilter}
+          setWeekFilter={setWeekFilter}
+          surveyCompletion={surveyCompletion}
+          navigate={navigate}
+          setShowOnboarding={setShowOnboarding}
+        />
       </ParticipantShell>
     </>
   );

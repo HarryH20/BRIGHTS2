@@ -10,6 +10,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import NotificationBell from "./NotificationBell.jsx";
+import { SurveyContext } from "./SurveyContext.jsx";
 
 const NAV = [
   { to: "/dashboard", label: "Home",     icon: LayoutDashboard },
@@ -25,18 +26,18 @@ function isActive(pathname, to) {
 export default function ParticipantShell({ user, onLogout, children, title }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const [surveyStatus, setSurveyStatus] = useState(null);
+  const [surveyInfo, setSurveyInfo] = useState(null);
 
   useEffect(() => {
     fetch("/api/survey/next", { credentials: "include" })
       .then((r) => r.json())
-      .then((d) => setSurveyStatus(d.status))
+      .then((d) => setSurveyInfo(d))
       .catch(() => {});
   }, []);
 
   const displayName = user?.display_name || user?.username || "";
   const truncName = displayName.length > 12 ? displayName.slice(0, 12) + "…" : displayName;
-  const surveyDue = surveyStatus === "due";
+  const surveyDue = surveyInfo?.status === "due";
 
   return (
     <div style={s.page}>
@@ -91,7 +92,9 @@ export default function ParticipantShell({ user, onLogout, children, title }) {
 
       {/* ── Main content ── */}
       <main style={s.main} className="participant-main">
-        {children}
+        <SurveyContext.Provider value={surveyInfo}>
+          {children}
+        </SurveyContext.Provider>
       </main>
 
       {/* ── Participant ID watermark ── */}

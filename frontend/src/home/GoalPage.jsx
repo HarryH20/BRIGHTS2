@@ -3,7 +3,22 @@ import { useParams } from "react-router-dom";
 import ParticipantShell from "./ParticipantShell.jsx";
 import JourneyPath from "./JourneyPath.jsx";
 import RadarPlot from "../graphs/RadarPlot.jsx";
+import { useSurveyInfo } from "./SurveyContext.jsx";
 import { AlertCircle } from "lucide-react";
+
+function GoalJourneySection({ surveyCompletion }) {
+  const surveyInfo = useSurveyInfo();
+  if (!surveyCompletion) return null;
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <JourneyPath
+        surveyCompletion={surveyCompletion}
+        currentTimepoint={surveyInfo?.timepoint ?? null}
+        compact
+      />
+    </div>
+  );
+}
 
 const LIKERT = {
   1: "Strongly disagree", 2: "Disagree", 3: "Somewhat disagree",
@@ -81,7 +96,6 @@ export default function GoalPage({ user, onLogout }) {
   const [error,            setError]            = useState(null);
   const [weeks,            setWeeks]            = useState("2-6");
   const [surveyCompletion, setSurveyCompletion] = useState(null);
-  const [surveyTimepoint,  setSurveyTimepoint]  = useState(null);
 
   const shownTPs = useMemo(() => tpsForWeeks(weeks), [weeks]);
 
@@ -100,11 +114,6 @@ export default function GoalPage({ user, onLogout }) {
     fetch("/api/survey/status", { credentials: "include" })
       .then(r => r.json())
       .then(d => setSurveyCompletion(d.timepoints ?? null))
-      .catch(() => {});
-
-    fetch("/api/survey/next", { credentials: "include" })
-      .then(r => r.json())
-      .then(d => setSurveyTimepoint(d.timepoint ?? null))
       .catch(() => {});
   }, [goalId]);
 
@@ -136,15 +145,7 @@ export default function GoalPage({ user, onLogout }) {
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "24px 16px" }}>
 
       {/* Compact journey path */}
-      {surveyCompletion && (
-        <div style={{ marginBottom: 20 }}>
-          <JourneyPath
-            surveyCompletion={surveyCompletion}
-            currentTimepoint={surveyTimepoint}
-            compact
-          />
-        </div>
-      )}
+      <GoalJourneySection surveyCompletion={surveyCompletion} />
 
       <div style={s.card}>
         {/* Filter bar */}

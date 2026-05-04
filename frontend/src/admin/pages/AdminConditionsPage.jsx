@@ -22,6 +22,7 @@ export default function AdminConditionsPage({ user, onLogout }) {
 
   // Add condition form
   const [addLabel, setAddLabel] = useState("");
+  const [addGroupName, setAddGroupName] = useState("");
   const [addDesc, setAddDesc] = useState("");
   const [addColor, setAddColor] = useState("");
   const [addCap, setAddCap] = useState("");
@@ -88,21 +89,26 @@ export default function AdminConditionsPage({ user, onLogout }) {
     if (!addLabel.trim()) { setAddError("Label is required"); return; }
     setAddError("");
     setAddSaving(true);
+    const rawColor = addColor.trim();
+    const normalizedColor = rawColor
+      ? (rawColor.startsWith("#") ? rawColor : "#" + rawColor)
+      : null;
     fetch(`/api/admin/rounds/${selectedRoundId}/conditions`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         label: addLabel.trim(),
+        group_name: addGroupName.trim() || null,
         description: addDesc.trim() || null,
-        color: addColor.trim() || null,
+        color: normalizedColor,
         max_capacity: addCap ? parseInt(addCap) : null,
       }),
     })
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok) { setAddError(d.error || "Failed to add"); return; }
-        setAddLabel(""); setAddDesc(""); setAddColor(""); setAddCap("");
+        setAddLabel(""); setAddGroupName(""); setAddDesc(""); setAddColor(""); setAddCap("");
         loadRoundData(selectedRoundId);
         setSuccess("Condition added");
         setTimeout(() => setSuccess(""), 2500);
@@ -279,12 +285,21 @@ export default function AdminConditionsPage({ user, onLogout }) {
                   <div style={{ fontWeight: 800, fontSize: 12, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                     Add Condition
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr auto auto", gap: 8, alignItems: "end" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr auto auto", gap: 8, alignItems: "end" }}>
                     <div>
                       <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>Label *</div>
                       <input
                         value={addLabel}
                         onChange={(e) => setAddLabel(e.target.value)}
+                        placeholder="e.g. Control"
+                        style={{ ...s.select, width: "100%", boxSizing: "border-box" }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>Group name *</div>
+                      <input
+                        value={addGroupName}
+                        onChange={(e) => setAddGroupName(e.target.value)}
                         placeholder="e.g. control"
                         style={{ ...s.select, width: "100%", boxSizing: "border-box" }}
                       />

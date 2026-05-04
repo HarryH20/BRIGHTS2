@@ -460,6 +460,14 @@ def login():
         logger.error("Failed to create session log for user=%s", user.id, exc_info=True)
         db.session.rollback()
 
+    login_researcher_row = None
+    try:
+        login_researcher_row = ResearcherRole.query.filter_by(
+            user_id=user.id, revoked_at=None
+        ).first()
+    except Exception:
+        pass
+
     return jsonify({
         "message": "Login successful",
         "user": {
@@ -470,7 +478,9 @@ def login():
             "participant_id": user.participant_id,
             "avatar_url": user.avatar_url,
             "display_name": user.display_name,
-            "last_login": user.last_login.isoformat() if user.last_login else None
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+            "is_researcher": login_researcher_row is not None,
+            "researcher_role": login_researcher_row.role if login_researcher_row else None,
         }
     }), 200
 
@@ -549,6 +559,18 @@ def me():
                 "round_status": round_.status,
             }
 
+    has_researcher_role = False
+    researcher_role_name = None
+    try:
+        researcher_role_row = ResearcherRole.query.filter_by(
+            user_id=user.id,
+            revoked_at=None,
+        ).first()
+        has_researcher_role = researcher_role_row is not None
+        researcher_role_name = researcher_role_row.role if researcher_role_row else None
+    except Exception:
+        pass
+
     return jsonify({
         "user": {
             "id": user.id,
@@ -561,6 +583,8 @@ def me():
             "created_at": user.created_at.isoformat(),
             "last_login": user.last_login.isoformat() if user.last_login else None,
             "active_enrollment": active_enrollment,
+            "is_researcher": has_researcher_role,
+            "researcher_role": researcher_role_name,
         }
     }), 200
 
