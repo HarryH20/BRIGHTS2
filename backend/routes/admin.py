@@ -438,6 +438,28 @@ def admin_attrition_funnel():
 
 
 # =============================================================================
+# Study metadata
+# =============================================================================
+
+@admin_bp.route("/study", methods=["GET"])
+@admin_required
+def get_study():
+    """GET /api/admin/study — brights2 study metadata for admin UI."""
+    study = Study.query.filter_by(study_key="brights2").first()
+    if not study:
+        return jsonify(None), 200
+    return jsonify({
+        "id": study.id,
+        "title": study.study_name,
+        "study_code": study.study_key,
+        "status": study.status,
+        "start_date": None,
+        "end_date": None,
+        "description": study.description,
+    }), 200
+
+
+# =============================================================================
 # Rounds management
 # =============================================================================
 
@@ -1206,8 +1228,8 @@ def _create_notification(user_id, notif_type, title, body, round_id=None,
     db.session.add(log)
 
     try:
-        from routes.auth import _push_notification
-        _push_notification(n.user_id, n)
+        from routes.auth import _push_notification, _notif_dict
+        _push_notification(n.user_id, _notif_dict(n))
     except Exception:
         pass
 
@@ -1359,6 +1381,7 @@ def save_strategy(round_id):
     if raw_bs is not None:
         strategy.block_sizes = [int(x) for x in raw_bs]
     strategy.stratify_by = data.get("stratify_by", strategy.stratify_by)
+    strategy.rng_seed = data.get("rng_seed", strategy.rng_seed)
 
     try:
         db.session.commit()
@@ -1569,13 +1592,13 @@ def get_balance(round_id):
         result.append({
             "label": c.label,
             "group": c.group_name,
-            "assigned": assigned,
-            "capacity": c.max_capacity,
+            "assigned_count": assigned,
+            "max_capacity": c.max_capacity,
             "pct": pct,
         })
 
     return jsonify({
-        "conditions": result,
+        "balance": result,
         "total_enrolled": total_enrolled,
         "total_assigned": total_assigned,
         "unassigned": total_enrolled - total_assigned,

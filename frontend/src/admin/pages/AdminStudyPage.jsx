@@ -551,8 +551,8 @@ function NotifySection({ studyId }) {
     setSending(true);
     setResult(null);
     try {
-      const body = { type: notifType };
-      if (bodyOverride.trim()) body.body_override = bodyOverride.trim();
+      const body = { notif_type: notifType };
+      if (bodyOverride.trim()) body.message = bodyOverride.trim();
       const res = await fetch(`/api/admin/rounds/${selectedRound}/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

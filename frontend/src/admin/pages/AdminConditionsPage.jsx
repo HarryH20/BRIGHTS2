@@ -156,11 +156,13 @@ export default function AdminConditionsPage({ user, onLogout }) {
     fetch(`/api/admin/rounds/${selectedRoundId}/randomize`, {
       method: "POST",
       credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
     })
       .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok) { setError(d.error || "Randomization failed"); return; }
-        setSuccess(`Sequence generated: ${d.sequence_length} slots (strategy locked)`);
+        setSuccess(`Sequence generated: ${d.randomized} slots (strategy locked)`);
         setTimeout(() => setSuccess(""), 4000);
         loadRoundData(selectedRoundId);
       })
