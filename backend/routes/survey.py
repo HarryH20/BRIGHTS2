@@ -1,10 +1,15 @@
 import logging
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request, session
-from models import db, User, SurveyQuestion, SurveySubmission, SurveyResponse, TemplateQuestion, Enrollment
+from models import (
+    db, User, SurveyQuestion, SurveySubmission, SurveyResponse,
+    TemplateQuestion, Enrollment, DataQualityFlag, QualityCheckRun,
+    FlagThresholdConfig,
+)
 from routes.auth import login_required, admin_required
+from analysis.data_quality import run_quality_checks, DEFAULT_THRESHOLDS
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +217,7 @@ def submit_survey():
 
     timepoint = data.get("timepoint")
     responses = data.get("responses", [])
+    started_at = data.get("started_at")
 
     if not isinstance(timepoint, int) or not (1 <= timepoint <= 6):
         return jsonify({"error": "timepoint must be an integer 1–6"}), 400
@@ -274,13 +280,14 @@ def submit_survey():
 
         # Record submission + set next unlock date (7 days), NULL for T6
         next_unlocks = _utcnow() + timedelta(days=7) if timepoint < 6 else None
-        db.session.add(SurveySubmission(
+        submission = SurveySubmission(
             user_id=user_id,
             timepoint=timepoint,
             next_unlocks_at=next_unlocks,
             round_id=user.active_round_id if user else None,
             enrollment_id=enrollment.id if enrollment else None,
-        ))
+        )
+        db.session.add(submission)
 
         db.session.commit()
         logger.info("Survey T%s submitted: user=%s responses=%s", timepoint, user_id, len(responses))
@@ -289,6 +296,86 @@ def submit_survey():
         db.session.rollback()
         logger.error("Survey submit failed: user=%s T%s", user_id, timepoint, exc_info=True)
         return jsonify({"error": "Failed to save survey"}), 500
+
+    # ── Post-submit quality checks (advisory only — never blocks or alters submission) ──
+    try:
+        quality_responses = []
+        for r in responses:
+            qid = r.get("question_id")
+            if not qid:
+                continue
+            q = db.session.get(SurveyQuestion, qid)
+            if not q:
+                q = db.session.get(TemplateQuestion, qid)
+            if not q:
+                continue
+            quality_responses.append({
+                "question_id": qid,
+                "scale_type": q.scale_type,
+                "response_value": r.get("response_value"),
+            })
+
+        completion_seconds = None
+        if started_at:
+            try:
+                started = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                now_utc = _utcnow()
+                if started.tzinfo is not None:
+                    from datetime import timezone
+                    now_utc = datetime.now(timezone.utc)
+                completion_seconds = (now_utc - started).total_seconds()
+                if completion_seconds < 0:
+                    completion_seconds = None
+            except (ValueError, TypeError):
+                pass
+
+        active_thresholds = DEFAULT_THRESHOLDS
+        if user and user.active_round_id:
+            config_rows = (
+                FlagThresholdConfig.query
+                .filter_by(round_id=user.active_round_id)
+                .order_by(FlagThresholdConfig.effective_from.asc())
+                .all()
+            )
+            if config_rows:
+                merged = {}
+                for row in config_rows:
+                    merged[row.flag_type] = row.thresholds
+                active_thresholds = merged
+
+        qc_result = run_quality_checks(
+            submission_id=submission.id,
+            responses=quality_responses,
+            completion_seconds=completion_seconds,
+            thresholds=active_thresholds,
+        )
+
+        for flag in qc_result["flags"]:
+            db.session.add(DataQualityFlag(
+                user_id=user_id,
+                round_id=user.active_round_id if user else None,
+                submission_id=submission.id,
+                flag_type=flag["flag_type"],
+                severity=flag["severity"],
+                detail=flag["detail"],
+                auto_generated=True,
+                is_resolved=False,
+                justification="",
+            ))
+
+        db.session.add(QualityCheckRun(
+            submission_id=submission.id,
+            round_id=user.active_round_id if user else None,
+            triggered_by="auto_post_submit",
+            config_snapshot=active_thresholds,
+            code_version="1.0",
+            flags_created=len(qc_result["flags"]),
+            duration_ms=qc_result["duration_ms"],
+        ))
+        db.session.commit()
+
+    except Exception as e:
+        logger.error("Quality check failed for submission %s: %s", submission.id, str(e))
 
     # After successful commit, check if all timepoints are complete and update enrollment
     if enrollment and user and user.active_round_id:

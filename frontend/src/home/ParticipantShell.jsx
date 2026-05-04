@@ -9,6 +9,7 @@ import {
   Shield,
   ClipboardList,
 } from "lucide-react";
+import NotificationBell from "./NotificationBell.jsx";
 
 const NAV = [
   { to: "/dashboard", label: "Home",     icon: LayoutDashboard },
@@ -72,6 +73,7 @@ export default function ParticipantShell({ user, onLogout, children, title }) {
                 <span>Admin Panel</span>
               </Link>
             )}
+            <NotificationBell userId={user?.id} />
             {user?.avatar_url ? (
               <img src={user.avatar_url} alt="" style={s.avatar} />
             ) : (

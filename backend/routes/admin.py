@@ -1,16 +1,38 @@
-import logging
+import hashlib
 import importlib
+import logging
+import string
+import secrets
 
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request, session
 from sqlalchemy import func
-from models import AuditLog, Enrollment, SessionLog, Study, StudyRound, StudyTemplate, TemplateQuestion, User, db
+
+import json
+import numpy as np
+
+from models import (
+    AuditLog, AllocationLog, AllocationSequence, ConditionAssignmentStrategy,
+    DataQualityFlag, Enrollment, FlagThresholdConfig,
+    Notification, NotificationDeliveryLog, NotificationPreference,
+    QualityCheckRun,
+    ResearcherInvitation, ResearcherRole,
+    SessionLog, Study, StudyCondition, StudyRound, StudyTemplate,
+    SurveySubmission, TemplateQuestion, User, db,
+    ConsentForm, ConsentFormRevision, ParticipantConsent,
+)
 from routes.auth import admin_required
 
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
+
+
+def _generate_join_code():
+    """Generate an 8-character uppercase alphanumeric join code."""
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(8))
 
 @admin_bp.route("/roseplot", methods=["GET"])
 @admin_required
@@ -478,6 +500,7 @@ def create_round():
         template_id=data.get("template_id"),
         round_number=max_num + 1,
         round_label=data.get("round_label"),
+        join_code=_generate_join_code(),
         enrollment_opens_at=data.get("enrollment_opens_at"),
         data_collection_ends_at=data.get("data_collection_ends_at"),
         status="draft",
@@ -730,3 +753,1227 @@ def get_template_questions(template_id):
             for q in questions
         ]
     }), 200
+
+
+# =============================================================================
+# Researcher role management
+# =============================================================================
+
+_VALID_RESEARCHER_ROLES = {"pi", "research_assistant", "data_manager", "observer"}
+
+
+def _brights2_study():
+    return Study.query.filter_by(study_key="brights2").first()
+
+
+@admin_bp.route("/researchers", methods=["GET"])
+@admin_required
+def get_researchers():
+    """GET /api/admin/researchers — all active researcher roles for the brights2 study."""
+    study = _brights2_study()
+    if not study:
+        return jsonify({"researchers": []}), 200
+
+    rows = (
+        ResearcherRole.query
+        .filter_by(study_id=study.id, revoked_at=None)
+        .order_by(ResearcherRole.granted_at.desc())
+        .all()
+    )
+    result = []
+    for r in rows:
+        user = db.session.get(User, r.user_id)
+        result.append({
+            "id": r.id,
+            "role": r.role,
+            "granted_at": r.granted_at.isoformat() if r.granted_at else None,
+            "last_access_at": r.last_access_at.isoformat() if r.last_access_at else None,
+            "citi_completion_date": r.citi_completion_date.isoformat() if r.citi_completion_date else None,
+            "notes": r.notes,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "display_name": user.display_name,
+            } if user else None,
+        })
+    return jsonify({"researchers": result}), 200
+
+
+@admin_bp.route("/researchers/invite", methods=["POST"])
+@admin_required
+def invite_researcher():
+    """POST /api/admin/researchers/invite — generate a single-use invite link."""
+    data = request.get_json() or {}
+    role = data.get("role", "").strip()
+    expires_hours = int(data.get("expires_hours", 72))
+
+    if role not in _VALID_RESEARCHER_ROLES:
+        return jsonify({"error": f"Invalid role. Must be one of: {sorted(_VALID_RESEARCHER_ROLES)}"}), 400
+
+    study = _brights2_study()
+    if not study:
+        return jsonify({"error": "Study not found"}), 404
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(hours=expires_hours)
+
+    try:
+        inv = ResearcherInvitation(
+            study_id=study.id,
+            role=role,
+            token_hash=token_hash,
+            created_by=session.get("user_id"),
+            expires_at=expires_at,
+            max_uses=1,
+            uses=0,
+        )
+        db.session.add(inv)
+        db.session.add(AuditLog(
+            user_id=session.get("user_id"),
+            event_type="RESEARCHER_INVITE_CREATED",
+            detail=f"role={role} expires={expires_at.isoformat()}",
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to create researcher invitation", exc_info=True)
+        return jsonify({"error": "Failed to create invitation"}), 500
+
+    invite_url = request.host_url.rstrip("/") + "/researcher/join/" + raw_token
+    return jsonify({
+        "invite_url": invite_url,
+        "role": role,
+        "expires_at": expires_at.isoformat(),
+    }), 201
+
+
+@admin_bp.route("/researchers/<int:role_id>", methods=["DELETE"])
+@admin_required
+def revoke_researcher(role_id):
+    """DELETE /api/admin/researchers/<id> — soft-revoke a researcher role."""
+    role_row = db.session.get(ResearcherRole, role_id)
+    if not role_row:
+        return jsonify({"error": "Role not found"}), 404
+
+    try:
+        now = datetime.now(timezone.utc)
+        role_row.revoked_at = now
+        role_row.revoked_by = session.get("user_id")
+        db.session.add(AuditLog(
+            user_id=session.get("user_id"),
+            event_type="RESEARCHER_ROLE_REVOKED",
+            detail=f"ResearcherRole {role_id} user={role_row.user_id} role={role_row.role}",
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to revoke researcher role=%s", role_id, exc_info=True)
+        return jsonify({"error": "Failed to revoke role"}), 500
+
+    return jsonify({"success": True}), 200
+
+
+@admin_bp.route("/researchers/invitations", methods=["GET"])
+@admin_required
+def get_researcher_invitations():
+    """GET /api/admin/researchers/invitations — active (non-expired, non-revoked) invitations."""
+    study = _brights2_study()
+    if not study:
+        return jsonify({"invitations": []}), 200
+
+    now = datetime.now(timezone.utc)
+    rows = ResearcherInvitation.query.filter_by(study_id=study.id, revoked_at=None).all()
+    active = []
+    for inv in rows:
+        exp = inv.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp > now and inv.uses < inv.max_uses:
+            active.append({
+                "id": inv.id,
+                "role": inv.role,
+                "expires_at": inv.expires_at.isoformat() if inv.expires_at else None,
+                "uses": inv.uses,
+                "max_uses": inv.max_uses,
+                "created_at": inv.created_at.isoformat() if inv.created_at else None,
+            })
+    return jsonify({"invitations": active}), 200
+
+
+@admin_bp.route("/researchers/invitations/<int:inv_id>", methods=["DELETE"])
+@admin_required
+def revoke_researcher_invitation(inv_id):
+    """DELETE /api/admin/researchers/invitations/<id> — revoke a pending invitation."""
+    inv = db.session.get(ResearcherInvitation, inv_id)
+    if not inv:
+        return jsonify({"error": "Invitation not found"}), 404
+
+    try:
+        inv.revoked_at = datetime.now(timezone.utc)
+        inv.revoked_by = session.get("user_id")
+        db.session.add(AuditLog(
+            user_id=session.get("user_id"),
+            event_type="RESEARCHER_INVITE_REVOKED",
+            detail=f"ResearcherInvitation {inv_id} role={inv.role}",
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to revoke researcher invitation=%s", inv_id, exc_info=True)
+        return jsonify({"error": "Failed to revoke invitation"}), 500
+
+    return jsonify({"success": True}), 200
+
+
+# =============================================================================
+# Consent management admin routes
+# =============================================================================
+
+@admin_bp.route("/consent/forms", methods=["GET"])
+@admin_required
+def get_consent_forms():
+    """GET /api/admin/consent/forms — all consent forms for the brights2 study."""
+    study_key = request.args.get("study_key", "brights2")
+    study = Study.query.filter_by(study_key=study_key).first()
+    if not study:
+        return jsonify({"forms": []}), 200
+
+    forms = ConsentForm.query.filter_by(study_id=study.id).order_by(ConsentForm.created_at.desc()).all()
+    result = []
+    for f in forms:
+        latest = (
+            ConsentFormRevision.query
+            .filter_by(consent_form_id=f.id)
+            .order_by(ConsentFormRevision.created_at.desc())
+            .first()
+        )
+        revision_count = ConsentFormRevision.query.filter_by(consent_form_id=f.id).count()
+        d = f.to_dict()
+        d["version"] = latest.version if latest else None
+        d["revision_count"] = revision_count
+        result.append(d)
+    return jsonify({"forms": result}), 200
+
+
+@admin_bp.route("/consent/forms/<int:form_id>/revisions", methods=["GET"])
+@admin_required
+def get_consent_revisions(form_id):
+    """GET /api/admin/consent/forms/<id>/revisions — all revisions for a form."""
+    form = db.session.get(ConsentForm, form_id)
+    if not form:
+        return jsonify({"error": "Form not found"}), 404
+
+    revisions = (
+        ConsentFormRevision.query
+        .filter_by(consent_form_id=form_id)
+        .order_by(ConsentFormRevision.created_at.desc())
+        .all()
+    )
+    return jsonify({"revisions": [r.to_dict() for r in revisions]}), 200
+
+
+@admin_bp.route("/consent/forms", methods=["POST"])
+@admin_required
+def create_consent_form():
+    """POST /api/admin/consent/forms — create a new consent form with its first revision."""
+    data = request.get_json() or {}
+    study_key = data.get("study_key", "brights2")
+    study = Study.query.filter_by(study_key=study_key).first()
+    if not study:
+        return jsonify({"error": "Study not found"}), 404
+
+    title = (data.get("title") or "").strip()
+    body_markdown = (data.get("body_markdown") or "").strip()
+    version = (data.get("version") or "1.0").strip()
+    if not title or not body_markdown:
+        return jsonify({"error": "title and body_markdown are required"}), 400
+
+    body_hash = hashlib.sha256(body_markdown.encode()).hexdigest()
+
+    try:
+        form = ConsentForm(study_id=study.id, title=title, is_active=False)
+        db.session.add(form)
+        db.session.flush()
+
+        revision = ConsentFormRevision(
+            consent_form_id=form.id,
+            version=version,
+            body_markdown=body_markdown,
+            body_hash=body_hash,
+            irb_approval_number=data.get("irb_approval_number"),
+            created_by=session.get("user_id"),
+            change_summary=data.get("change_summary"),
+            is_material_change=bool(data.get("is_material_change", False)),
+        )
+        db.session.add(revision)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to create consent form", exc_info=True)
+        return jsonify({"error": "Failed to create consent form"}), 500
+
+    result = form.to_dict()
+    result["revision"] = revision.to_dict()
+    return jsonify(result), 201
+
+
+@admin_bp.route("/consent/forms/<int:form_id>/revisions", methods=["POST"])
+@admin_required
+def create_consent_revision(form_id):
+    """POST /api/admin/consent/forms/<id>/revisions — add a new revision."""
+    form = db.session.get(ConsentForm, form_id)
+    if not form:
+        return jsonify({"error": "Form not found"}), 404
+
+    data = request.get_json() or {}
+    body_markdown = (data.get("body_markdown") or "").strip()
+    version = (data.get("version") or "").strip()
+    if not body_markdown or not version:
+        return jsonify({"error": "body_markdown and version are required"}), 400
+
+    prev = (
+        ConsentFormRevision.query
+        .filter_by(consent_form_id=form_id)
+        .order_by(ConsentFormRevision.created_at.desc())
+        .first()
+    )
+    body_hash = hashlib.sha256(body_markdown.encode()).hexdigest()
+
+    try:
+        revision = ConsentFormRevision(
+            consent_form_id=form_id,
+            version=version,
+            body_markdown=body_markdown,
+            body_hash=body_hash,
+            prev_revision_hash=prev.body_hash if prev else None,
+            irb_approval_number=data.get("irb_approval_number"),
+            created_by=session.get("user_id"),
+            change_summary=data.get("change_summary"),
+            is_material_change=bool(data.get("is_material_change", False)),
+        )
+        db.session.add(revision)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to create consent revision form=%s", form_id, exc_info=True)
+        return jsonify({"error": "Failed to create revision"}), 500
+
+    return jsonify(revision.to_dict()), 201
+
+
+@admin_bp.route("/consent/forms/<int:form_id>/activate", methods=["PATCH"])
+@admin_required
+def activate_consent_form(form_id):
+    """PATCH /api/admin/consent/forms/<id>/activate — set this form as active."""
+    form = db.session.get(ConsentForm, form_id)
+    if not form:
+        return jsonify({"error": "Form not found"}), 404
+
+    try:
+        ConsentForm.query.filter_by(study_id=form.study_id).update({"is_active": False})
+        form.is_active = True
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to activate consent form=%s", form_id, exc_info=True)
+        return jsonify({"error": "Failed to activate form"}), 500
+
+    return jsonify(form.to_dict()), 200
+
+
+@admin_bp.route("/consent/dashboard", methods=["GET"])
+@admin_required
+def consent_dashboard():
+    """GET /api/admin/consent/dashboard — summary stats for consent tracking."""
+    study = Study.query.filter_by(study_key="brights2").first()
+    if not study:
+        return jsonify({"total_enrolled": 0, "consented": 0, "pending_consent": 0, "withdrawn": 0, "by_version": {}}), 200
+
+    round_ids = [r.id for r in StudyRound.query.filter_by(study_id=study.id).all()]
+
+    total_enrolled = Enrollment.query.filter(
+        Enrollment.round_id.in_(round_ids),
+        Enrollment.status.in_(["active", "completed"]),
+    ).count() if round_ids else 0
+
+    consented = ParticipantConsent.query.filter(
+        ParticipantConsent.round_id.in_(round_ids)
+    ).count() if round_ids else 0
+
+    withdrawn = Enrollment.query.filter(
+        Enrollment.round_id.in_(round_ids),
+        Enrollment.status == "withdrawn",
+    ).count() if round_ids else 0
+
+    pending_consent = max(0, total_enrolled - consented)
+
+    by_version_rows = (
+        db.session.query(
+            ConsentFormRevision.version,
+            func.count(ParticipantConsent.id),
+        )
+        .join(ParticipantConsent, ParticipantConsent.consent_form_revision_id == ConsentFormRevision.id)
+        .group_by(ConsentFormRevision.version)
+        .all()
+    )
+    by_version = {row[0]: row[1] for row in by_version_rows}
+
+    return jsonify({
+        "total_enrolled": total_enrolled,
+        "consented": consented,
+        "pending_consent": pending_consent,
+        "withdrawn": withdrawn,
+        "by_version": by_version,
+    }), 200
+
+
+# =============================================================================
+# Approved notification copy templates (neutral, operational, research-valid)
+# =============================================================================
+
+NOTIFICATION_TEMPLATES = {
+    'survey_available': {
+        'title': 'Week {week} survey is now available',
+        'body': ('Your Week {week} survey is open. '
+                 'It takes about 6 minutes to complete. '
+                 'Available until {closes}.'),
+    },
+    'survey_reminder': {
+        'title': 'Reminder: Week {week} survey closes soon',
+        'body': ('Your Week {week} survey closes on {closes}. '
+                 'Complete it to keep your study record up to date.'),
+    },
+    'round_closing': {
+        'title': 'Study round closing soon',
+        'body': ('The {study_name} study round closes on {date}. '
+                 'Make sure you have completed all available surveys.'),
+    },
+    'study_complete': {
+        'title': 'Study complete — thank you',
+        'body': ('You have completed all {weeks} weeks of '
+                 '{study_name}. Thank you for your participation.'),
+    },
+    'general': {
+        'title': '{title}',
+        'body': '{body}',
+    },
+}
+
+
+def _create_notification(user_id, notif_type, title, body, round_id=None,
+                         action_url=None, expires_at=None):
+    """
+    Create a Notification row and delivery log entry within the current session.
+    Only survey_reminder type is gated by reminders_enabled.
+    Caller must db.session.commit() after this returns.
+    """
+    if notif_type == 'survey_reminder':
+        pref = db.session.get(NotificationPreference, user_id)
+        if pref and not pref.reminders_enabled:
+            return None
+
+    n = Notification(
+        user_id=user_id,
+        round_id=round_id,
+        type=notif_type,
+        title=title,
+        body=body,
+        action_url=action_url,
+        is_read=False,
+        expires_at=expires_at,
+    )
+    db.session.add(n)
+    db.session.flush()  # assign n.id before commit
+
+    enrollment = None
+    if round_id:
+        enrollment = Enrollment.query.filter_by(
+            user_id=user_id, round_id=round_id, status='active'
+        ).first()
+
+    log = NotificationDeliveryLog(
+        notification_id=n.id,
+        user_id=user_id,
+        round_id=round_id,
+        condition_label=enrollment.condition_label if enrollment else None,
+        notification_type=notif_type,
+        delivered_at=datetime.now(timezone.utc),
+    )
+    db.session.add(log)
+
+    try:
+        from routes.auth import _push_notification
+        _push_notification(n.user_id, n)
+    except Exception:
+        pass
+
+    return n
+
+
+# =============================================================================
+# Condition definitions
+# =============================================================================
+
+@admin_bp.route("/rounds/<int:round_id>/conditions", methods=["GET"])
+@admin_required
+def get_conditions(round_id):
+    """GET /api/admin/rounds/<id>/conditions — list conditions with assignment counts."""
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    conditions = StudyCondition.query.filter_by(round_id=round_id).all()
+    result = []
+    for c in conditions:
+        assigned = Enrollment.query.filter_by(
+            round_id=round_id, condition_label=c.label, status='active'
+        ).count()
+        result.append({
+            "id": c.id,
+            "label": c.label,
+            "group_name": c.group_name,
+            "description": c.description,
+            "color": c.color,
+            "max_capacity": c.max_capacity,
+            "assigned_count": assigned,
+        })
+    return jsonify({"conditions": result}), 200
+
+
+@admin_bp.route("/rounds/<int:round_id>/conditions", methods=["POST"])
+@admin_required
+def create_condition(round_id):
+    """POST /api/admin/rounds/<id>/conditions — add a condition to a round."""
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    strategy = ConditionAssignmentStrategy.query.filter_by(round_id=round_id).first()
+    if strategy and strategy.is_locked:
+        return jsonify({"error": "Cannot add conditions after randomization has begun"}), 409
+
+    data = request.get_json() or {}
+    label = (data.get("label") or "").strip()
+    if not label:
+        return jsonify({"error": "label is required"}), 400
+
+    cond = StudyCondition(
+        round_id=round_id,
+        label=label,
+        group_name=data.get("group_name"),
+        description=data.get("description"),
+        color=data.get("color"),
+        max_capacity=data.get("max_capacity"),
+    )
+    try:
+        db.session.add(cond)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to create condition", exc_info=True)
+        return jsonify({"error": "Failed to create condition"}), 500
+
+    return jsonify({
+        "id": cond.id, "label": cond.label, "group_name": cond.group_name,
+        "description": cond.description, "color": cond.color,
+        "max_capacity": cond.max_capacity, "assigned_count": 0,
+    }), 201
+
+
+@admin_bp.route("/rounds/<int:round_id>/conditions/<int:cid>", methods=["DELETE"])
+@admin_required
+def delete_condition(round_id, cid):
+    """DELETE /api/admin/rounds/<id>/conditions/<cid> — remove an unassigned condition."""
+    cond = db.session.get(StudyCondition, cid)
+    if not cond or cond.round_id != round_id:
+        return jsonify({"error": "Condition not found"}), 404
+
+    enrolled = Enrollment.query.filter_by(
+        round_id=round_id, condition_label=cond.label
+    ).count()
+    if enrolled > 0:
+        return jsonify({"error": "Cannot delete condition with enrolled participants"}), 409
+
+    try:
+        db.session.delete(cond)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to delete condition"}), 500
+
+    return jsonify({"success": True}), 200
+
+
+# =============================================================================
+# Assignment strategy
+# =============================================================================
+
+@admin_bp.route("/rounds/<int:round_id>/strategy", methods=["GET"])
+@admin_required
+def get_strategy(round_id):
+    """GET /api/admin/rounds/<id>/strategy — current strategy or defaults."""
+    strategy = ConditionAssignmentStrategy.query.filter_by(round_id=round_id).first()
+    if not strategy:
+        return jsonify({
+            "algorithm": "permuted_block",
+            "block_sizes": [4, 6, 8],
+            "stratify_by": None,
+            "rng_seed": None,
+            "is_locked": False,
+            "locked_at": None,
+        }), 200
+    return jsonify({
+        "id": strategy.id,
+        "algorithm": strategy.algorithm,
+        "block_sizes": strategy.block_sizes,
+        "stratify_by": strategy.stratify_by,
+        "rng_seed": strategy.rng_seed,
+        "is_locked": strategy.is_locked,
+        "locked_at": strategy.locked_at.isoformat() if strategy.locked_at else None,
+    }), 200
+
+
+@admin_bp.route("/rounds/<int:round_id>/strategy", methods=["POST"])
+@admin_required
+def save_strategy(round_id):
+    """POST /api/admin/rounds/<id>/strategy — create or update randomization strategy."""
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    strategy = ConditionAssignmentStrategy.query.filter_by(round_id=round_id).first()
+    if strategy and strategy.is_locked:
+        return jsonify({"error": "Strategy is locked — randomization has begun"}), 409
+
+    data = request.get_json() or {}
+    if not strategy:
+        strategy = ConditionAssignmentStrategy(round_id=round_id)
+        db.session.add(strategy)
+
+    strategy.algorithm = data.get("algorithm", strategy.algorithm)
+    raw_bs = data.get("block_sizes")
+    if raw_bs is not None:
+        strategy.block_sizes = [int(x) for x in raw_bs]
+    strategy.stratify_by = data.get("stratify_by", strategy.stratify_by)
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to save strategy"}), 500
+
+    return jsonify({
+        "id": strategy.id,
+        "algorithm": strategy.algorithm,
+        "block_sizes": strategy.block_sizes,
+        "stratify_by": strategy.stratify_by,
+        "is_locked": strategy.is_locked,
+    }), 200
+
+
+# =============================================================================
+# Randomization
+# =============================================================================
+
+def _generate_block_sequence(rng, arms, n_total, block_sizes=(4, 6, 8)):
+    sequence = []
+    while len(sequence) < n_total:
+        bs = int(rng.choice(block_sizes))
+        block = []
+        for arm in arms:
+            block.extend([arm] * (bs // len(arms)))
+        rng.shuffle(block)
+        sequence.extend(block)
+    return sequence[:n_total]
+
+
+@admin_bp.route("/rounds/<int:round_id>/randomize", methods=["POST"])
+@admin_required
+def randomize_round(round_id):
+    """POST /api/admin/rounds/<id>/randomize — atomic permuted-block assignment."""
+    data = request.get_json() or {}
+    if not data.get("confirm"):
+        return jsonify({"error": "confirm: true required"}), 400
+
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    strategy = ConditionAssignmentStrategy.query.filter_by(round_id=round_id).first()
+    if strategy and strategy.is_locked:
+        return jsonify({"error": "Strategy is locked — randomization has begun"}), 409
+
+    conditions = StudyCondition.query.filter_by(round_id=round_id).all()
+    if len(conditions) < 2:
+        return jsonify({"error": "At least 2 conditions required"}), 400
+
+    enrollments = Enrollment.query.filter_by(
+        round_id=round_id, status='active'
+    ).filter(Enrollment.condition_label.is_(None)).all()
+
+    if not enrollments:
+        return jsonify({"randomized": 0, "message": "All participants already assigned"}), 200
+
+    if not strategy:
+        strategy = ConditionAssignmentStrategy(round_id=round_id)
+        db.session.add(strategy)
+
+    seed_str = f"{round_id}:{strategy.rng_seed or 'default'}"
+    seed_int = int(hashlib.sha256(seed_str.encode()).hexdigest()[:16], 16)
+    rng = np.random.default_rng(seed_int)
+    arms = [c.label for c in conditions]
+    block_sizes = strategy.block_sizes or [4, 6, 8]
+    sequence = _generate_block_sequence(rng, arms, len(enrollments), block_sizes)
+
+    condition_map = {c.label: c for c in conditions}
+    now = datetime.now(timezone.utc)
+    admin_user_id = session.get("user_id")
+
+    try:
+        for i, enrollment in enumerate(enrollments):
+            label = sequence[i]
+            cond = condition_map[label]
+            enrollment.condition_label = label
+            enrollment.condition_group = cond.group_name
+
+            log = AllocationLog(
+                enrollment_id=enrollment.id,
+                round_id=round_id,
+                user_id=enrollment.user_id,
+                condition_label=label,
+                condition_group=cond.group_name,
+                strategy=strategy.algorithm,
+                sequence_index=i,
+                assigned_by=admin_user_id,
+                assigned_at=now,
+            )
+            db.session.add(log)
+
+            slot = AllocationSequence(
+                round_id=round_id,
+                sequence_index=i,
+                condition_label=label,
+                consumed_by_enrollment_id=enrollment.id,
+                consumed_at=now,
+            )
+            db.session.add(slot)
+
+        strategy.is_locked = True
+        strategy.locked_at = now
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Randomization failed for round=%s", round_id, exc_info=True)
+        return jsonify({"error": "Randomization failed"}), 500
+
+    balance = {}
+    for arm in arms:
+        balance[arm] = Enrollment.query.filter_by(
+            round_id=round_id, condition_label=arm, status='active'
+        ).count()
+
+    return jsonify({
+        "randomized": len(enrollments),
+        "balance": balance,
+        "algorithm": strategy.algorithm,
+    }), 200
+
+
+# =============================================================================
+# Manual condition assignment
+# =============================================================================
+
+@admin_bp.route("/enrollments/<int:enrollment_id>/condition", methods=["PATCH"])
+@admin_required
+def reassign_condition(enrollment_id):
+    """PATCH /api/admin/enrollments/<id>/condition — manually reassign a participant's condition."""
+    data = request.get_json() or {}
+    new_label = (data.get("condition_label") or "").strip()
+    reason = (data.get("reason") or "").strip()
+
+    if not new_label:
+        return jsonify({"error": "condition_label required"}), 400
+    if not reason:
+        return jsonify({"error": "reason required"}), 400
+
+    enrollment = db.session.get(Enrollment, enrollment_id)
+    if not enrollment:
+        return jsonify({"error": "Enrollment not found"}), 404
+
+    cond = StudyCondition.query.filter_by(
+        round_id=enrollment.round_id, label=new_label
+    ).first()
+    prior = enrollment.condition_label
+
+    try:
+        enrollment.condition_label = new_label
+        enrollment.condition_group = cond.group_name if cond else None
+
+        log = AllocationLog(
+            enrollment_id=enrollment.id,
+            round_id=enrollment.round_id,
+            user_id=enrollment.user_id,
+            condition_label=new_label,
+            condition_group=cond.group_name if cond else None,
+            prior_condition_label=prior,
+            strategy='manual',
+            assigned_by=session.get("user_id"),
+            reason=reason,
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Failed to reassign condition"}), 500
+
+    return jsonify({
+        "id": enrollment.id,
+        "condition_label": enrollment.condition_label,
+        "condition_group": enrollment.condition_group,
+        "status": enrollment.status,
+        "user_id": enrollment.user_id,
+        "round_id": enrollment.round_id,
+    }), 200
+
+
+# =============================================================================
+# Balance view
+# =============================================================================
+
+@admin_bp.route("/rounds/<int:round_id>/balance", methods=["GET"])
+@admin_required
+def get_balance(round_id):
+    """GET /api/admin/rounds/<id>/balance — condition assignment balance."""
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    conditions = StudyCondition.query.filter_by(round_id=round_id).all()
+    total_enrolled = Enrollment.query.filter_by(round_id=round_id, status='active').count()
+    total_assigned = Enrollment.query.filter(
+        Enrollment.round_id == round_id,
+        Enrollment.status == 'active',
+        Enrollment.condition_label.isnot(None),
+    ).count()
+
+    result = []
+    for c in conditions:
+        assigned = Enrollment.query.filter_by(
+            round_id=round_id, condition_label=c.label, status='active'
+        ).count()
+        pct = round(assigned / total_enrolled, 4) if total_enrolled > 0 else 0.0
+        result.append({
+            "label": c.label,
+            "group": c.group_name,
+            "assigned": assigned,
+            "capacity": c.max_capacity,
+            "pct": pct,
+        })
+
+    return jsonify({
+        "conditions": result,
+        "total_enrolled": total_enrolled,
+        "total_assigned": total_assigned,
+        "unassigned": total_enrolled - total_assigned,
+    }), 200
+
+
+# =============================================================================
+# User enrollment lookup
+# =============================================================================
+
+@admin_bp.route("/users/<int:user_id>/enrollment", methods=["GET"])
+@admin_required
+def get_user_enrollment(user_id):
+    """GET /api/admin/users/<id>/enrollment — user's active enrollment with condition."""
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    enrollment = Enrollment.query.filter_by(user_id=user_id, status='active').first()
+    if not enrollment:
+        return jsonify({"enrollment": None}), 200
+
+    round_ = db.session.get(StudyRound, enrollment.round_id)
+    return jsonify({
+        "enrollment": {
+            "id": enrollment.id,
+            "round_id": enrollment.round_id,
+            "round_label": round_.round_label if round_ else None,
+            "status": enrollment.status,
+            "condition_label": enrollment.condition_label,
+            "condition_group": enrollment.condition_group,
+            "enrolled_at": enrollment.enrolled_at.isoformat() if enrollment.enrolled_at else None,
+        }
+    }), 200
+
+
+# =============================================================================
+# Admin batch notification
+# =============================================================================
+
+@admin_bp.route("/rounds/<int:round_id>/notify", methods=["POST"])
+@admin_required
+def send_notifications(round_id):
+    """POST /api/admin/rounds/<id>/notify — send notification to all active participants."""
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    data = request.get_json() or {}
+    notif_type = data.get("notif_type", "general")
+    week = data.get("week", 1)
+    closes_at = data.get("closes_at", "")
+    message = data.get("message", "")
+
+    if notif_type not in NOTIFICATION_TEMPLATES:
+        return jsonify({"error": "Invalid notif_type"}), 400
+
+    tmpl = NOTIFICATION_TEMPLATES[notif_type]
+    study_name = round_.study.study_name if round_.study else "the study"
+    num_weeks = round_.template.num_weeks if round_.template else 6
+
+    fmt = {
+        "week": week, "closes": closes_at, "date": closes_at,
+        "study_name": study_name, "weeks": num_weeks,
+        "title": message, "body": message,
+    }
+    title = tmpl["title"].format(**fmt)
+    body = tmpl["body"].format(**fmt)
+
+    action_url = "/survey" if "survey" in notif_type else "/dashboard"
+
+    enrollments = Enrollment.query.filter_by(round_id=round_id, status='active').all()
+    sent = 0
+    skipped = 0
+
+    for enrollment in enrollments:
+        n = _create_notification(
+            user_id=enrollment.user_id,
+            notif_type=notif_type,
+            title=title,
+            body=body,
+            round_id=round_id,
+            action_url=action_url,
+        )
+        if n is None:
+            skipped += 1
+        else:
+            sent += 1
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to send notifications for round=%s", round_id, exc_info=True)
+        return jsonify({"error": "Failed to send notifications"}), 500
+
+    return jsonify({"sent": sent, "skipped": skipped}), 200
+
+
+# =============================================================================
+# Data quality flag routes
+# =============================================================================
+
+_VALID_FLAG_TYPES = {
+    "speeding", "straight_lining", "pattern_response", "missing_data", "low_variance",
+}
+
+_VALID_RESOLUTIONS = {
+    "excluded_confirmed", "excluded_borderline", "retained_borderline",
+    "retained_confirmed", "data_error", "technical_issue",
+}
+
+
+def _flag_to_dict(flag):
+    user = db.session.get(User, flag.user_id)
+    sub = db.session.get(SurveySubmission, flag.submission_id) if flag.submission_id else None
+    round_ = db.session.get(StudyRound, flag.round_id) if flag.round_id else None
+    return {
+        "id": flag.id,
+        "flag_type": flag.flag_type,
+        "severity": flag.severity,
+        "detail": flag.detail,
+        "is_resolved": flag.is_resolved,
+        "justification": flag.justification,
+        "created_at": flag.created_at.isoformat() if flag.created_at else None,
+        "resolved_at": flag.resolved_at.isoformat() if flag.resolved_at else None,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "participant_id": user.participant_id,
+        } if user else None,
+        "submission": {
+            "id": sub.id,
+            "timepoint": sub.timepoint,
+            "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
+        } if sub else None,
+        "round": {
+            "id": round_.id,
+            "round_label": round_.round_label or f"Round {round_.round_number}",
+        } if round_ else None,
+    }
+
+
+@admin_bp.route("/quality-flags/summary", methods=["GET"])
+@admin_required
+def quality_flags_summary():
+    """GET /api/admin/quality-flags/summary?round_id=<id>"""
+    round_id = request.args.get("round_id", type=int)
+    if not round_id:
+        return jsonify({"error": "round_id is required"}), 400
+
+    q = DataQualityFlag.query.filter_by(round_id=round_id)
+    all_flags = q.all()
+
+    total = len(all_flags)
+    unresolved = sum(1 for f in all_flags if not f.is_resolved)
+    by_severity = {}
+    by_type = {}
+    for f in all_flags:
+        by_severity[f.severity] = by_severity.get(f.severity, 0) + 1
+        by_type[f.flag_type] = by_type.get(f.flag_type, 0) + 1
+
+    flagged_participants = len({f.user_id for f in all_flags})
+
+    total_submissions = SurveySubmission.query.filter_by(round_id=round_id).count()
+    flagged_submissions = len({f.submission_id for f in all_flags if f.submission_id})
+    pct = round(flagged_submissions / total_submissions, 4) if total_submissions > 0 else 0.0
+
+    return jsonify({
+        "total_flags": total,
+        "unresolved": unresolved,
+        "by_severity": by_severity,
+        "by_type": by_type,
+        "flagged_participants": flagged_participants,
+        "pct_submissions_flagged": pct,
+    }), 200
+
+
+@admin_bp.route("/quality-flags", methods=["GET"])
+@admin_required
+def get_quality_flags():
+    """GET /api/admin/quality-flags?round_id=<id>&severity=&flag_type=&is_resolved=false&user_id=&offset=0"""
+    round_id = request.args.get("round_id", type=int)
+    user_id = request.args.get("user_id", type=int)
+
+    if not round_id and not user_id:
+        return jsonify({"error": "round_id or user_id is required"}), 400
+
+    q = DataQualityFlag.query
+    if round_id:
+        q = q.filter(DataQualityFlag.round_id == round_id)
+    if user_id:
+        q = q.filter(DataQualityFlag.user_id == user_id)
+
+    severity = request.args.get("severity")
+    if severity and severity != "all":
+        q = q.filter(DataQualityFlag.severity == severity)
+
+    flag_type = request.args.get("flag_type")
+    if flag_type and flag_type != "all":
+        q = q.filter(DataQualityFlag.flag_type == flag_type)
+
+    is_resolved_param = request.args.get("is_resolved", "false").lower()
+    if is_resolved_param == "true":
+        q = q.filter(DataQualityFlag.is_resolved == True)  # noqa: E712
+    elif is_resolved_param == "false":
+        q = q.filter(DataQualityFlag.is_resolved == False)  # noqa: E712
+    # "all" → no filter
+
+    offset = request.args.get("offset", 0, type=int)
+    limit = 50
+
+    flags = q.order_by(DataQualityFlag.created_at.desc()).offset(offset).limit(limit + 1).all()
+    has_more = len(flags) > limit
+    flags = flags[:limit]
+
+    return jsonify({
+        "flags": [_flag_to_dict(f) for f in flags],
+        "has_more": has_more,
+        "offset": offset,
+    }), 200
+
+
+@admin_bp.route("/quality-flags/bulk-resolve", methods=["POST"])
+@admin_required
+def bulk_resolve_quality_flags():
+    """POST /api/admin/quality-flags/bulk-resolve"""
+    data = request.get_json() or {}
+    flag_ids = data.get("flag_ids", [])
+    resolution = data.get("resolution", "").strip()
+    justification = data.get("justification", "").strip()
+
+    if not flag_ids:
+        return jsonify({"error": "flag_ids required"}), 400
+    if resolution not in _VALID_RESOLUTIONS:
+        return jsonify({"error": f"resolution must be one of: {sorted(_VALID_RESOLUTIONS)}"}), 400
+    if len(justification) < 20:
+        return jsonify({"error": "justification must be at least 20 characters"}), 400
+
+    now = datetime.now(timezone.utc)
+    resolver_id = session.get("user_id")
+    resolved = 0
+
+    for flag_id in flag_ids:
+        flag = db.session.get(DataQualityFlag, flag_id)
+        if not flag or flag.is_resolved:
+            continue
+        flag.is_resolved = True
+        flag.resolved_at = now
+        flag.resolved_by_user_id = resolver_id
+        flag.justification = justification
+        flag.detail = {**(flag.detail or {}), "resolution_note": f"{resolution}: {justification}"}
+        resolved += 1
+
+    try:
+        db.session.add(AuditLog(
+            user_id=resolver_id,
+            event_type="QUALITY_FLAGS_BULK_RESOLVED",
+            detail=f"Resolved {resolved} flags: resolution={resolution}",
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Bulk resolve quality flags failed", exc_info=True)
+        return jsonify({"error": "Failed to resolve flags"}), 500
+
+    return jsonify({"resolved": resolved}), 200
+
+
+@admin_bp.route("/quality-flags/<int:flag_id>/resolve", methods=["POST"])
+@admin_required
+def resolve_quality_flag(flag_id):
+    """POST /api/admin/quality-flags/<flag_id>/resolve"""
+    flag = db.session.get(DataQualityFlag, flag_id)
+    if not flag:
+        return jsonify({"error": "Flag not found"}), 404
+
+    data = request.get_json() or {}
+    resolution = data.get("resolution", "").strip()
+    justification = data.get("justification", "").strip()
+
+    if resolution not in _VALID_RESOLUTIONS:
+        return jsonify({"error": f"resolution must be one of: {sorted(_VALID_RESOLUTIONS)}"}), 400
+    if len(justification) < 20:
+        return jsonify({"error": "justification must be at least 20 characters"}), 400
+
+    now = datetime.now(timezone.utc)
+    flag.is_resolved = True
+    flag.resolved_at = now
+    flag.resolved_by_user_id = session.get("user_id")
+    flag.justification = justification
+    flag.detail = {**(flag.detail or {}), "resolution_note": f"{resolution}: {justification}"}
+
+    try:
+        db.session.add(AuditLog(
+            user_id=session.get("user_id"),
+            event_type="QUALITY_FLAG_RESOLVED",
+            detail=f"Flag {flag_id}: resolution={resolution}",
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Resolve quality flag failed flag=%s", flag_id, exc_info=True)
+        return jsonify({"error": "Failed to resolve flag"}), 500
+
+    return jsonify(_flag_to_dict(flag)), 200
+
+
+@admin_bp.route("/rounds/<int:round_id>/flag-thresholds", methods=["GET"])
+@admin_required
+def get_flag_thresholds(round_id):
+    """GET /api/admin/rounds/<round_id>/flag-thresholds"""
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    rows = (
+        FlagThresholdConfig.query
+        .filter_by(round_id=round_id)
+        .order_by(FlagThresholdConfig.flag_type, FlagThresholdConfig.effective_from.desc())
+        .all()
+    )
+
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row.flag_type, []).append({
+            "id": row.id,
+            "flag_type": row.flag_type,
+            "thresholds": row.thresholds,
+            "preregistered": row.preregistered,
+            "prereg_url": row.prereg_url,
+            "effective_from": row.effective_from.isoformat() if row.effective_from else None,
+            "created_by": row.created_by,
+        })
+
+    return jsonify({"thresholds": grouped}), 200
+
+
+@admin_bp.route("/rounds/<int:round_id>/flag-thresholds", methods=["POST"])
+@admin_required
+def create_flag_threshold(round_id):
+    """POST /api/admin/rounds/<round_id>/flag-thresholds"""
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    data = request.get_json() or {}
+    flag_type = data.get("flag_type", "").strip()
+    thresholds = data.get("thresholds")
+    preregistered = bool(data.get("preregistered", False))
+    prereg_url = data.get("prereg_url")
+
+    if flag_type not in _VALID_FLAG_TYPES:
+        return jsonify({"error": f"flag_type must be one of: {sorted(_VALID_FLAG_TYPES)}"}), 400
+    if not thresholds or not isinstance(thresholds, dict):
+        return jsonify({"error": "thresholds must be a non-empty object"}), 400
+
+    runs = QualityCheckRun.query.filter_by(round_id=round_id).count()
+    if runs > 0 and not preregistered:
+        return jsonify({
+            "error": "Cannot change thresholds after analysis has run. Preregistered thresholds only.",
+            "analysis_runs": runs,
+        }), 409
+
+    try:
+        config = FlagThresholdConfig(
+            round_id=round_id,
+            flag_type=flag_type,
+            thresholds=thresholds,
+            preregistered=preregistered,
+            prereg_url=prereg_url,
+            created_by=session.get("user_id"),
+        )
+        db.session.add(config)
+        db.session.add(AuditLog(
+            user_id=session.get("user_id"),
+            event_type="FLAG_THRESHOLD_CREATED",
+            detail=f"round={round_id} flag_type={flag_type} preregistered={preregistered}",
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to create flag threshold round=%s", round_id, exc_info=True)
+        return jsonify({"error": "Failed to create threshold config"}), 500
+
+    return jsonify({
+        "id": config.id,
+        "round_id": config.round_id,
+        "flag_type": config.flag_type,
+        "thresholds": config.thresholds,
+        "preregistered": config.preregistered,
+        "prereg_url": config.prereg_url,
+        "effective_from": config.effective_from.isoformat() if config.effective_from else None,
+    }), 201
+
+
+@admin_bp.route("/rounds/<int:round_id>/recheck", methods=["POST"])
+@admin_required
+def recheck_quality_flags(round_id):
+    """POST /api/admin/rounds/<round_id>/recheck — placeholder."""
+    return jsonify({"error": "Not implemented"}), 501

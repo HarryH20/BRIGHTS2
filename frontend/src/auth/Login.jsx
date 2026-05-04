@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 export default function Login({ onLogin, onGoToRegister }) {
+  const [searchParams] = useSearchParams();
+  const researcherToken = searchParams.get("researcher");
+  const joinCode = searchParams.get("join") || sessionStorage.getItem("pending_join_code") || null;
+
   const [identifier, setIdentifier] = useState(""); // username OR email
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -73,6 +78,40 @@ export default function Login({ onLogin, onGoToRegister }) {
         return;
       }
 
+      // If a researcher invite token is in the URL, accept it after login
+      if (researcherToken) {
+        try {
+          await fetch(`/auth/researcher/join/${researcherToken}`, {
+            method: "POST",
+            credentials: "include",
+          });
+        } catch {}
+        onLogin?.(data.user);
+        setLoading(false);
+        return;
+      }
+
+      // If a pending join code exists, attempt enrollment after login
+      if (joinCode) {
+        try {
+          const pendingToken = sessionStorage.getItem("pending_join_token");
+          const enrollRes = await fetch(`/auth/join/${joinCode}/enroll`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ token: pendingToken }),
+          });
+          sessionStorage.removeItem("pending_join_code");
+          sessionStorage.removeItem("pending_join_token");
+          if (enrollRes.ok) {
+            const enrollData = await enrollRes.json().catch(() => ({}));
+            onLogin?.(enrollData.user || data.user);
+            setLoading(false);
+            return;
+          }
+        } catch {}
+      }
+
       // Success: { message, user }
       onLogin?.(data.user);
       setLoading(false);
@@ -89,6 +128,20 @@ export default function Login({ onLogin, onGoToRegister }) {
           <h1 style={styles.title}>Sign in</h1>
           <p style={styles.subtitle}>Use your username or email to log in.</p>
         </div>
+
+        {joinCode && (
+          <div style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "rgba(99,179,237,0.12)",
+            border: "1px solid rgba(99,179,237,0.35)",
+            color: "#bee3f8",
+            fontSize: 13,
+            marginBottom: 8,
+          }}>
+            Sign in to complete your study enrollment.
+          </div>
+        )}
 
         <label style={styles.label}>
           Username or Email

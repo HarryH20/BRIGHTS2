@@ -4,6 +4,7 @@ import HomeLayout from "./HomeLayout.jsx";
 
 const TP_LABELS = { 1: "Week 1", 2: "Week 2", 3: "Week 3", 4: "Week 4", 5: "Week 5", 6: "Week 6" };
 const DRAFT_KEY = "brights2_survey_draft_v1";
+const startedAtKey = (tp) => `survey_started_at_T${tp}`;
 
 const LIKERT7_LABELS = {
   1: "Strongly\nDisagree",
@@ -47,6 +48,15 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
       responses,
     }));
   }, [responses, state, surveyData]);
+
+  // Record survey start time once per timepoint (for quality check completion_seconds)
+  useEffect(() => {
+    if (state !== "due" || !surveyData) return;
+    const key = startedAtKey(surveyData.timepoint);
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, new Date().toISOString());
+    }
+  }, [state, surveyData?.timepoint]); // eslint-disable-line
 
   // Restore draft once surveyData loads
   useEffect(() => {
@@ -177,12 +187,18 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
       }
     }
 
+    const startedAt = localStorage.getItem(startedAtKey(surveyData.timepoint));
+
     try {
       const res = await fetch("/api/survey/submit", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ timepoint: surveyData.timepoint, responses: payload }),
+        body: JSON.stringify({
+          timepoint: surveyData.timepoint,
+          responses: payload,
+          ...(startedAt ? { started_at: startedAt } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -190,6 +206,7 @@ export default function SurveyForm({ user, onLogout, onSurveyComplete }) {
         setState("due");
       } else {
         localStorage.removeItem(DRAFT_KEY);
+        localStorage.removeItem(startedAtKey(surveyData.timepoint));
         onSurveyComplete?.();
         setState("submitted");
       }

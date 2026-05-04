@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ParticipantShell from "./ParticipantShell.jsx";
 
 export default function Profile({ user, onLogout, onUserUpdate }) {
@@ -70,6 +70,76 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
       }
     } catch {
       setDisplayNameMsg({ ok: false, text: "Network error. Please try again." });
+    }
+  }
+
+  // ---------- notification preferences ----------
+  const [notifPrefs, setNotifPrefs] = useState(null);
+  const [notifMsg, setNotifMsg] = useState(null);
+  const [notifSaving, setNotifSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/notifications/preferences", { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setNotifPrefs(d); })
+      .catch(() => {});
+  }, []);
+
+  async function handleNotifPrefsSubmit(e) {
+    e.preventDefault();
+    setNotifSaving(true);
+    setNotifMsg(null);
+    try {
+      const res = await fetch("/api/notifications/preferences", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(notifPrefs),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setNotifMsg({ ok: false, text: data.error || "Failed to save" });
+      } else {
+        setNotifPrefs(data);
+        setNotifMsg({ ok: true, text: "Preferences saved." });
+        setTimeout(() => setNotifMsg(null), 2500);
+      }
+    } catch {
+      setNotifMsg({ ok: false, text: "Network error." });
+    } finally {
+      setNotifSaving(false);
+    }
+  }
+
+  // ---------- withdrawal ----------
+  const [withdrawConfirm, setWithdrawConfirm] = useState(false);
+  const [withdrawScope, setWithdrawScope] = useState("full");
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawMsg, setWithdrawMsg] = useState(null);
+
+  async function handleWithdraw(e) {
+    e.preventDefault();
+    setWithdrawing(true);
+    setWithdrawMsg(null);
+    try {
+      const res = await fetch("/auth/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ scope: withdrawScope, reason: withdrawReason || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setWithdrawMsg({ ok: false, text: data.error || "Withdrawal request failed." });
+      } else {
+        setWithdrawMsg({ ok: true, text: "Withdrawal request submitted. Your study coordinator will follow up." });
+        setWithdrawConfirm(false);
+      }
+    } catch {
+      setWithdrawMsg({ ok: false, text: "Network error. Please try again." });
+    } finally {
+      setWithdrawing(false);
     }
   }
 
@@ -250,6 +320,97 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
             </button>
           </form>
         </section>
+
+        {/* Notification Preferences */}
+        {notifPrefs && (
+          <section style={styles.section}>
+            <h2 style={styles.h2}>Notification Preferences</h2>
+            <form onSubmit={handleNotifPrefsSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 14, color: "var(--text-primary)" }}>
+                <input
+                  type="checkbox"
+                  checked={notifPrefs.reminders_enabled}
+                  onChange={(e) => setNotifPrefs((p) => ({ ...p, reminders_enabled: e.target.checked }))}
+                  style={{ width: 18, height: 18, cursor: "pointer" }}
+                />
+                Enable study reminders
+              </label>
+              {notifMsg && (
+                <div style={{ ...styles.msg, color: notifMsg.ok ? "#4ade80" : "#f87171" }}>{notifMsg.text}</div>
+              )}
+              <button type="submit" disabled={notifSaving} style={{ ...styles.button, cursor: notifSaving ? "wait" : "pointer", alignSelf: "flex-start" }}>
+                {notifSaving ? "Saving…" : "Save Preferences"}
+              </button>
+            </form>
+          </section>
+        )}
+
+        {/* Withdraw from Study — only show when enrolled */}
+        {user?.active_enrollment && (
+          <section style={styles.section}>
+            <h2 style={{ ...styles.h2, color: "#f87171" }}>Withdraw from Study</h2>
+            <p style={{ fontSize: 13, color: "var(--text-muted, #8b9cbe)", marginBottom: 12, lineHeight: 1.55 }}>
+              You may withdraw from the study at any time. Your participation is voluntary.
+              Withdrawing will not affect any services you receive.
+            </p>
+
+            {withdrawMsg && (
+              <div style={{ ...styles.msg, color: withdrawMsg.ok ? "#4ade80" : "#f87171", marginBottom: 12 }}>
+                {withdrawMsg.text}
+              </div>
+            )}
+
+            {!withdrawConfirm ? (
+              <button
+                style={{ ...styles.button, background: "rgba(248,113,113,0.12)", border: "1px solid rgba(248,113,113,0.35)", color: "#f87171", cursor: "pointer" }}
+                onClick={() => setWithdrawConfirm(true)}
+              >
+                Request Withdrawal
+              </button>
+            ) : (
+              <form onSubmit={handleWithdraw} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
+                  Withdrawal Scope
+                  <select
+                    value={withdrawScope}
+                    onChange={(e) => setWithdrawScope(e.target.value)}
+                    style={{ ...styles.input, cursor: "pointer" }}
+                  >
+                    <option value="full">Full withdrawal — stop participation and remove from future contact</option>
+                    <option value="future_only">Future only — stop new data collection, keep existing data</option>
+                    <option value="data_only">Data deletion request — also request deletion of collected data</option>
+                  </select>
+                </label>
+                <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
+                  Reason (optional)
+                  <textarea
+                    value={withdrawReason}
+                    onChange={(e) => setWithdrawReason(e.target.value)}
+                    placeholder="You don't need to provide a reason, but it helps us improve."
+                    style={{ ...styles.input, minHeight: 72, resize: "vertical" }}
+                    maxLength={500}
+                  />
+                </label>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    type="submit"
+                    disabled={withdrawing}
+                    style={{ ...styles.button, background: "rgba(248,113,113,0.15)", border: "1px solid rgba(248,113,113,0.4)", color: "#f87171", cursor: withdrawing ? "wait" : "pointer" }}
+                  >
+                    {withdrawing ? "Submitting…" : "Confirm Withdrawal"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setWithdrawConfirm(false); setWithdrawMsg(null); }}
+                    style={{ ...styles.button, cursor: "pointer" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        )}
 
       </div>
     </ParticipantShell>

@@ -64,13 +64,14 @@ db.init_app(app)
 limiter.init_app(app)
 
 # Register blueprints
-from routes.auth import auth_bp
+from routes.auth import auth_bp, notif_bp
 from routes.visualizations import viz_bp
 from routes.logs import logs_bp
 from routes.admin import admin_bp
 from routes.survey import survey_bp, admin_survey_bp
 
 app.register_blueprint(auth_bp)
+app.register_blueprint(notif_bp)
 app.register_blueprint(viz_bp)
 app.register_blueprint(logs_bp)
 app.register_blueprint(admin_bp)

@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, User, Target, BarChart3, MessageSquare,
   GitMerge, FileText, TrendingUp, FlaskConical, Shield, Download,
-  ChevronLeft, ChevronRight, ArrowLeft, LogOut,
+  ChevronLeft, ChevronRight, ArrowLeft, LogOut, UserCheck, ShieldAlert, Shuffle,
 } from "lucide-react";
 
 const NAV_GROUPS = [
@@ -16,9 +16,10 @@ const NAV_GROUPS = [
   {
     label: "PARTICIPANTS",
     items: [
-      { to: "/admin/sessions",  label: "Sessions",      icon: Users },
-      { to: "/admin/users",     label: "Participants",  icon: User },
-      { to: "/admin/goals",     label: "Goal Progress", icon: Target },
+      { to: "/admin/sessions",    label: "Sessions",      icon: Users },
+      { to: "/admin/users",       label: "Participants",  icon: User },
+      { to: "/admin/goals",       label: "Goal Progress", icon: Target },
+      { to: "/admin/conditions",  label: "Conditions",    icon: Shuffle },
     ],
   },
   {
@@ -29,14 +30,16 @@ const NAV_GROUPS = [
       { to: "/admin/alluvial",     label: "Alluvial",     icon: GitMerge },
       { to: "/admin/questions",    label: "Questions",    icon: FileText },
       { to: "/admin/stats",        label: "Stats",        icon: TrendingUp },
+      { to: "/admin/quality",      label: "Data Quality", icon: ShieldAlert },
     ],
   },
   {
     label: "STUDY",
     items: [
-      { to: "/admin/study",  label: "Study",     icon: FlaskConical },
-      { to: "/admin/audit",  label: "Audit Log", icon: Shield },
-      { to: "/admin/export", label: "Export",    icon: Download },
+      { to: "/admin/study",        label: "Study",       icon: FlaskConical },
+      { to: "/admin/researchers",  label: "Researchers", icon: UserCheck },
+      { to: "/admin/audit",        label: "Audit Log",   icon: Shield },
+      { to: "/admin/export",       label: "Export",      icon: Download },
     ],
   },
 ];

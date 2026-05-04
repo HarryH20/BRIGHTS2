@@ -539,6 +539,7 @@ class StudyRound(db.Model):
     )
     round_number = db.Column(db.Integer, nullable=False, default=1)
     round_label = db.Column(db.Text, nullable=True)
+    join_code = db.Column(db.Text, nullable=True)
     status = db.Column(
         db.Text, nullable=False, default="draft"
     )  # draft|enrolling|active|closed|archived
@@ -564,6 +565,7 @@ class StudyRound(db.Model):
             "template_id": self.template_id,
             "round_number": self.round_number,
             "round_label": self.round_label,
+            "join_code": self.join_code,
             "status": self.status,
             "enrollment_opens_at": self.enrollment_opens_at.isoformat() if self.enrollment_opens_at else None,
             "enrollment_closes_at": self.enrollment_closes_at.isoformat() if self.enrollment_closes_at else None,
@@ -598,6 +600,16 @@ class Enrollment(db.Model):
     withdrawn_at = db.Column(db.DateTime, nullable=True)
     withdrawal_reason = db.Column(db.Text, nullable=True)
     consent_version = db.Column(db.Text, nullable=True)
+    device_type = db.Column(db.Text, nullable=True)
+    user_agent_hash = db.Column(db.Text, nullable=True)
+    enrolled_ip_hash = db.Column(db.Text, nullable=True)
+    utm_source = db.Column(db.Text, nullable=True)
+    utm_medium = db.Column(db.Text, nullable=True)
+    utm_campaign = db.Column(db.Text, nullable=True)
+    referrer = db.Column(db.Text, nullable=True)
+    join_method = db.Column(db.Text, nullable=True)
+    condition_label = db.Column(db.Text, nullable=True)
+    condition_group = db.Column(db.Text, nullable=True)
 
     participant = db.relationship("User", foreign_keys=[user_id], backref="enrollments")
     # round backref defined in StudyRound.enrollments relationship — do not redefine here
@@ -666,3 +678,579 @@ class RoundComparison(db.Model):
 
     def __repr__(self):
         return f"<RoundComparison study={self.study_id} {self.round_a_id}v{self.round_b_id}>"
+
+
+# =============================================================================
+# Researcher roles and invitations — added for multi-researcher RBAC (migration 005).
+# =============================================================================
+
+
+class ResearcherRole(db.Model):
+    """Study-scoped role assignment for a researcher user."""
+
+    __tablename__ = "researcher_roles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    study_id = db.Column(
+        db.Integer, db.ForeignKey("studies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role = db.Column(db.Text, nullable=False)
+    granted_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    granted_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # Added in migration 005
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    last_access_at = db.Column(db.DateTime, nullable=True)
+    citi_completion_date = db.Column(db.Date, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+
+    study = db.relationship("Study", foreign_keys=[study_id], backref="researcher_roles")
+    researcher = db.relationship("User", foreign_keys=[user_id], backref="researcher_roles")
+    granter = db.relationship("User", foreign_keys=[granted_by])
+    revoker = db.relationship("User", foreign_keys=[revoked_by])
+
+    def __repr__(self):
+        return f"<ResearcherRole user={self.user_id} study={self.study_id} role={self.role!r}>"
+
+
+class ResearcherInvitation(db.Model):
+    """Single-use signed invitation for a user to join a study as a researcher."""
+
+    __tablename__ = "researcher_invitations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    study_id = db.Column(
+        db.Integer, db.ForeignKey("studies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role = db.Column(db.Text, nullable=False)
+    token_hash = db.Column(db.Text, nullable=False, unique=True)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    redeemed_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    redeemed_at = db.Column(db.DateTime, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    max_uses = db.Column(db.Integer, nullable=False, default=1)
+    uses = db.Column(db.Integer, nullable=False, default=0)
+    revoked_at = db.Column(db.DateTime, nullable=True)
+    revoked_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    study = db.relationship("Study", foreign_keys=[study_id], backref="researcher_invitations")
+    creator = db.relationship("User", foreign_keys=[created_by])
+    redeemer = db.relationship("User", foreign_keys=[redeemed_by])
+
+    def __repr__(self):
+        return f"<ResearcherInvitation study={self.study_id} role={self.role!r} uses={self.uses}/{self.max_uses}>"
+
+
+# =============================================================================
+# Data quality flag models — added in migration 007.
+# =============================================================================
+
+
+class DataQualityFlag(db.Model):
+    """Per-submission quality flag raised by automated detection or manually by a researcher.
+    Flags are ADVISORY ONLY — data is never deleted or excluded automatically."""
+
+    __tablename__ = "data_quality_flags"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    round_id = db.Column(
+        db.Integer,
+        db.ForeignKey("study_rounds.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    submission_id = db.Column(
+        db.Integer,
+        db.ForeignKey("survey_submissions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    flag_type = db.Column(db.Text, nullable=False)
+    severity = db.Column(db.Text, nullable=False)  # critical | warning | info
+    detail = db.Column(db.JSON, nullable=True)
+    auto_generated = db.Column(db.Boolean, nullable=False, default=True)
+    is_resolved = db.Column(db.Boolean, nullable=False, default=False)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    justification = db.Column(db.Text, nullable=False, default="")
+    resolved_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    participant = db.relationship("User", foreign_keys=[user_id], backref="quality_flags")
+    resolver = db.relationship("User", foreign_keys=[resolved_by_user_id])
+    submission = db.relationship("SurveySubmission", foreign_keys=[submission_id], backref="quality_flags")
+    round = db.relationship("StudyRound", foreign_keys=[round_id], backref="quality_flags")
+
+    def __repr__(self):
+        return f"<DataQualityFlag user={self.user_id} type={self.flag_type!r} severity={self.severity!r} resolved={self.is_resolved}>"
+
+
+class QualityCheckRun(db.Model):
+    """Audit record for each automated or manual quality check run."""
+
+    __tablename__ = "quality_check_runs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    submission_id = db.Column(
+        db.Integer,
+        db.ForeignKey("survey_submissions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    round_id = db.Column(
+        db.Integer,
+        db.ForeignKey("study_rounds.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    triggered_by = db.Column(db.Text, nullable=False)
+    triggered_by_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    config_snapshot = db.Column(db.JSON, nullable=False)
+    code_version = db.Column(db.Text, nullable=False, default="unknown")
+    flags_created = db.Column(db.Integer, nullable=False, default=0)
+    duration_ms = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    def __repr__(self):
+        return f"<QualityCheckRun submission={self.submission_id} triggered_by={self.triggered_by!r} flags={self.flags_created}>"
+
+
+class FlagThresholdConfig(db.Model):
+    """Researcher-configured detection thresholds per round and flag type.
+    New rows are appended (effective_from versioning); prior rows are never modified."""
+
+    __tablename__ = "flag_threshold_configs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    round_id = db.Column(
+        db.Integer,
+        db.ForeignKey("study_rounds.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    flag_type = db.Column(db.Text, nullable=False)
+    thresholds = db.Column(db.JSON, nullable=False)
+    preregistered = db.Column(db.Boolean, nullable=False, default=False)
+    prereg_url = db.Column(db.Text, nullable=True)
+    effective_from = db.Column(db.DateTime, nullable=False, default=utcnow)
+    created_by = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    round = db.relationship("StudyRound", foreign_keys=[round_id], backref="flag_threshold_configs")
+    creator = db.relationship("User", foreign_keys=[created_by])
+
+    def __repr__(self):
+        return f"<FlagThresholdConfig round={self.round_id} type={self.flag_type!r} preregistered={self.preregistered}>"
+
+# =============================================================================
+# Consent management models — added for self-enrollment and consent features.
+# =============================================================================
+
+
+class ConsentForm(db.Model):
+    """Versioned consent form for a study. Only one form is active at a time."""
+
+    __tablename__ = "consent_forms"
+
+    id = db.Column(db.Integer, primary_key=True)
+    study_id = db.Column(
+        db.Integer, db.ForeignKey("studies.id", ondelete="RESTRICT"), nullable=False
+    )
+    title = db.Column(db.Text, nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    study = db.relationship("Study", backref="consent_forms")
+    revisions = db.relationship(
+        "ConsentFormRevision",
+        backref="form",
+        foreign_keys="[ConsentFormRevision.consent_form_id]",
+        order_by="ConsentFormRevision.created_at.desc()",
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "study_id": self.study_id,
+            "title": self.title,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<ConsentForm study={self.study_id} title={self.title!r} active={self.is_active}>"
+
+
+class ConsentFormRevision(db.Model):
+    """Immutable versioned body of a consent form. Hash-chained for tamper evidence."""
+
+    __tablename__ = "consent_form_revisions"
+    __table_args__ = (db.UniqueConstraint("consent_form_id", "version"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    consent_form_id = db.Column(
+        db.Integer, db.ForeignKey("consent_forms.id", ondelete="RESTRICT"), nullable=False
+    )
+    version = db.Column(db.Text, nullable=False)
+    body_markdown = db.Column(db.Text, nullable=False)
+    body_hash = db.Column(db.Text, nullable=False)
+    prev_revision_hash = db.Column(db.Text, nullable=True)
+    irb_approval_number = db.Column(db.Text, nullable=True)
+    irb_approval_date = db.Column(db.Date, nullable=True)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    change_summary = db.Column(db.Text, nullable=True)
+    is_material_change = db.Column(db.Boolean, nullable=False, default=False)
+
+    creator = db.relationship("User", foreign_keys=[created_by])
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "consent_form_id": self.consent_form_id,
+            "version": self.version,
+            "body_markdown": self.body_markdown,
+            "body_hash": self.body_hash,
+            "prev_revision_hash": self.prev_revision_hash,
+            "irb_approval_number": self.irb_approval_number,
+            "irb_approval_date": self.irb_approval_date.isoformat() if self.irb_approval_date else None,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "change_summary": self.change_summary,
+            "is_material_change": self.is_material_change,
+        }
+
+    def __repr__(self):
+        return f"<ConsentFormRevision form={self.consent_form_id} v={self.version!r}>"
+
+
+class ParticipantConsent(db.Model):
+    """Records a participant's consent to a specific study round."""
+
+    __tablename__ = "participant_consents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    consent_form_id = db.Column(
+        db.Integer, db.ForeignKey("consent_forms.id"), nullable=True
+    )
+    round_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="SET NULL"), nullable=True
+    )
+    consented_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(300), nullable=True)
+    consent_form_revision_id = db.Column(
+        db.Integer,
+        db.ForeignKey("consent_form_revisions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    signature_method = db.Column(db.Text, nullable=True)
+    signature_payload = db.Column(db.JSON, nullable=True)
+    signature_meaning = db.Column(db.Text, nullable=True, default="I consent to participate")
+    pdf_storage_url = db.Column(db.Text, nullable=True)
+    pdf_sha256 = db.Column(db.Text, nullable=True)
+    record_hash = db.Column(db.Text, nullable=True)
+
+    participant = db.relationship("User", foreign_keys=[user_id], backref="consents")
+    consent_form = db.relationship("ConsentForm", foreign_keys=[consent_form_id])
+    revision = db.relationship("ConsentFormRevision", foreign_keys=[consent_form_revision_id])
+
+    def __repr__(self):
+        return f"<ParticipantConsent user={self.user_id} form={self.consent_form_id}>"
+
+
+class ConsentAcknowledgment(db.Model):
+    """Per-section acknowledgment record for granular consent tracking."""
+
+    __tablename__ = "consent_acknowledgments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    participant_consent_id = db.Column(
+        db.Integer,
+        db.ForeignKey("participant_consents.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    section_key = db.Column(db.Text, nullable=False)
+    scrolled_to_end_at = db.Column(db.DateTime, nullable=True)
+    dwell_seconds = db.Column(db.Integer, nullable=True)
+    comprehension_quiz = db.Column(db.JSON, nullable=True)
+    acknowledged_at = db.Column(db.DateTime, nullable=True)
+
+    consent = db.relationship(
+        "ParticipantConsent",
+        foreign_keys=[participant_consent_id],
+        backref="acknowledgments",
+    )
+
+    def __repr__(self):
+        return f"<ConsentAcknowledgment consent={self.participant_consent_id} section={self.section_key!r}>"
+
+
+class PendingEnrollment(db.Model):
+    """Short-lived token linking a join-link visit to a subsequent register/login."""
+
+    __tablename__ = "pending_enrollments"
+
+    token = db.Column(db.Text, primary_key=True)
+    round_id = db.Column(db.Integer, db.ForeignKey("study_rounds.id"), nullable=False)
+    join_code = db.Column(db.Text, nullable=False)
+    issued_ip_hash = db.Column(db.Text, nullable=True)
+    issued_ua = db.Column(db.Text, nullable=True)
+    utm_source = db.Column(db.Text, nullable=True)
+    utm_medium = db.Column(db.Text, nullable=True)
+    utm_campaign = db.Column(db.Text, nullable=True)
+    referrer = db.Column(db.Text, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    consumed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    study_round = db.relationship("StudyRound", foreign_keys=[round_id])
+
+    def __repr__(self):
+        return f"<PendingEnrollment round={self.round_id} consumed={self.consumed_at is not None}>"
+
+
+class WithdrawalRequest(db.Model):
+    """Records a participant's request to withdraw from a study."""
+
+    __tablename__ = "withdrawal_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    study_id = db.Column(db.Integer, db.ForeignKey("studies.id"), nullable=True)
+    round_id = db.Column(db.Integer, db.ForeignKey("study_rounds.id"), nullable=True)
+    scope = db.Column(db.Text, nullable=False, default="full")
+    reason_optional = db.Column(db.Text, nullable=True)
+    requested_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    effective_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    data_deletion_requested = db.Column(db.Boolean, nullable=False, default=False)
+    data_deletion_resolution = db.Column(db.Text, nullable=True)
+    processed_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    ip_address = db.Column(db.Text, nullable=True)
+    user_agent = db.Column(db.Text, nullable=True)
+
+    participant = db.relationship(
+        "User", foreign_keys=[user_id], backref="withdrawal_requests"
+    )
+    processor = db.relationship("User", foreign_keys=[processed_by])
+
+    def __repr__(self):
+        return f"<WithdrawalRequest user={self.user_id} scope={self.scope!r}>"
+
+
+# =============================================================================
+# Conditions, allocation, and notification models — Migration 006.
+# =============================================================================
+
+
+class StudyCondition(db.Model):
+    """A named arm/condition for a study round (e.g. Control, Intervention)."""
+
+    __tablename__ = "study_conditions"
+    __table_args__ = (db.UniqueConstraint("round_id", "label"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    round_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="CASCADE"), nullable=False
+    )
+    label = db.Column(db.Text, nullable=False)
+    group_name = db.Column(db.Text, nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    color = db.Column(db.String(20), nullable=True)
+    max_capacity = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    round = db.relationship("StudyRound", backref="conditions")
+
+    def __repr__(self):
+        return f"<StudyCondition round={self.round_id} label={self.label!r}>"
+
+
+class Notification(db.Model):
+    """In-app notification delivered to a participant."""
+
+    __tablename__ = "notifications"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    round_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="SET NULL"), nullable=True
+    )
+    type = db.Column(db.Text, nullable=False)
+    title = db.Column(db.Text, nullable=False)
+    body = db.Column(db.Text, nullable=True)
+    action_url = db.Column(db.Text, nullable=True)
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+    read_at = db.Column(db.DateTime, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    recipient = db.relationship("User", foreign_keys=[user_id], backref="notifications")
+
+    def __repr__(self):
+        return f"<Notification user={self.user_id} type={self.type!r} read={self.is_read}>"
+
+
+class ConditionAssignmentStrategy(db.Model):
+    """Per-round randomization strategy. Locked once first assignment is made."""
+
+    __tablename__ = "condition_assignment_strategies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    round_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="CASCADE"),
+        nullable=False, unique=True
+    )
+    algorithm = db.Column(db.Text, nullable=False, default="permuted_block")
+    block_sizes = db.Column(db.ARRAY(db.Integer), nullable=False, default=[4, 6, 8])
+    stratify_by = db.Column(db.ARRAY(db.Text), nullable=True)
+    rng_seed = db.Column(db.Text, nullable=True)
+    is_locked = db.Column(db.Boolean, nullable=False, default=False)
+    locked_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    round = db.relationship("StudyRound", backref="condition_strategy")
+
+    def __repr__(self):
+        return f"<ConditionAssignmentStrategy round={self.round_id} algo={self.algorithm!r} locked={self.is_locked}>"
+
+
+class AllocationSequence(db.Model):
+    """Pre-generated per-participant allocation slot. Consumed atomically on enrollment."""
+
+    __tablename__ = "allocation_sequence"
+    __table_args__ = (db.UniqueConstraint("round_id", "sequence_index"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    round_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="CASCADE"), nullable=False
+    )
+    sequence_index = db.Column(db.Integer, nullable=False)
+    condition_label = db.Column(db.Text, nullable=False)
+    strata_key = db.Column(db.Text, nullable=True)
+    consumed_by_enrollment_id = db.Column(
+        db.Integer, db.ForeignKey("enrollments.id", ondelete="SET NULL"),
+        nullable=True, unique=True
+    )
+    consumed_at = db.Column(db.DateTime, nullable=True)
+
+    round = db.relationship("StudyRound", backref="allocation_sequence")
+    enrollment = db.relationship("Enrollment", foreign_keys=[consumed_by_enrollment_id], backref="allocation_slot")
+
+    def __repr__(self):
+        return f"<AllocationSequence round={self.round_id} idx={self.sequence_index} label={self.condition_label!r}>"
+
+
+class AllocationLog(db.Model):
+    """Immutable audit record of every condition assignment. Never UPDATE or DELETE."""
+
+    __tablename__ = "allocation_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    enrollment_id = db.Column(
+        db.Integer, db.ForeignKey("enrollments.id", ondelete="RESTRICT"), nullable=False
+    )
+    round_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id"), nullable=False
+    )
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False
+    )
+    condition_label = db.Column(db.Text, nullable=False)
+    condition_group = db.Column(db.Text, nullable=True)
+    prior_condition_label = db.Column(db.Text, nullable=True)
+    strategy = db.Column(db.Text, nullable=False)
+    strata_key = db.Column(db.Text, nullable=True)
+    sequence_index = db.Column(db.Integer, nullable=True)
+    assigned_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    reason = db.Column(db.Text, nullable=True)
+    assigned_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    enrollment = db.relationship("Enrollment", foreign_keys=[enrollment_id], backref="allocation_logs")
+    assigner = db.relationship("User", foreign_keys=[assigned_by])
+
+    def __repr__(self):
+        return f"<AllocationLog enrollment={self.enrollment_id} label={self.condition_label!r}>"
+
+
+class NotificationPreference(db.Model):
+    """Per-user notification delivery preferences."""
+
+    __tablename__ = "notification_preferences"
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    reminders_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    quiet_hours_start = db.Column(db.Integer, default=9)
+    quiet_hours_end = db.Column(db.Integer, default=21)
+    timezone = db.Column(db.Text, default="America/Chicago")
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    user = db.relationship("User", backref="notification_prefs")
+
+    def __repr__(self):
+        return f"<NotificationPreference user={self.user_id} reminders={self.reminders_enabled}>"
+
+
+class NotificationDeliveryLog(db.Model):
+    """Delivery record for each notification, with condition for parity analysis."""
+
+    __tablename__ = "notification_delivery_log"
+
+    id = db.Column(db.Integer, primary_key=True)
+    notification_id = db.Column(
+        db.Integer, db.ForeignKey("notifications.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    round_id = db.Column(db.Integer, db.ForeignKey("study_rounds.id"), nullable=True)
+    condition_label = db.Column(db.Text, nullable=True)
+    notification_type = db.Column(db.Text, nullable=False)
+    delivered_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    opened_at = db.Column(db.DateTime, nullable=True)
+    action_taken_at = db.Column(db.DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<NotificationDeliveryLog notif={self.notification_id} user={self.user_id}>"

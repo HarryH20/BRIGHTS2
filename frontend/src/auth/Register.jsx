@@ -1,6 +1,11 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 export default function Register({ onRegistered, onGoToLogin }) {
+  const [searchParams] = useSearchParams();
+  const researcherToken = searchParams.get("researcher");
+  const joinCode = searchParams.get("join") || sessionStorage.getItem("pending_join_code") || null;
+
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,6 +57,43 @@ export default function Register({ onRegistered, onGoToLogin }) {
         return;
       }
 
+      // Log in first to get a session (needed for join/researcher flows)
+      if (researcherToken || joinCode) {
+        try {
+          const loginRes = await fetch("/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ username: u, password }),
+          });
+          if (loginRes.ok) {
+            if (researcherToken) {
+              await fetch(`/auth/researcher/join/${researcherToken}`, {
+                method: "POST",
+                credentials: "include",
+              });
+            }
+            if (joinCode) {
+              const pendingToken = sessionStorage.getItem("pending_join_token");
+              const enrollRes = await fetch(`/auth/join/${joinCode}/enroll`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ token: pendingToken }),
+              });
+              if (enrollRes.ok) {
+                sessionStorage.removeItem("pending_join_code");
+                sessionStorage.removeItem("pending_join_token");
+                const enrollData = await enrollRes.json().catch(() => ({}));
+                setLoading(false);
+                onRegistered?.(enrollData.user || data.user, true);
+                return;
+              }
+            }
+          }
+        } catch {}
+      }
+
       setSuccess("Account created! You can now sign in.");
       onRegistered?.(data.user);
 
@@ -72,6 +114,20 @@ export default function Register({ onRegistered, onGoToLogin }) {
           <h1 style={styles.title}>Create account</h1>
           <p style={styles.subtitle}>Register with a username, email, and password.</p>
         </div>
+
+        {joinCode && (
+          <div style={{
+            padding: "10px 14px",
+            borderRadius: 10,
+            background: "rgba(99,179,237,0.12)",
+            border: "1px solid rgba(99,179,237,0.35)",
+            color: "#bee3f8",
+            fontSize: 13,
+            marginBottom: 4,
+          }}>
+            You are enrolling in a research study. After creating your account you will be automatically enrolled.
+          </div>
+        )}
 
         <p style={{
           fontSize: 13,

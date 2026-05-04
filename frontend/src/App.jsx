@@ -26,6 +26,11 @@ import AdminAuditPage from "./admin/pages/AdminAuditPage.jsx";
 import AdminSessionsPage from "./admin/pages/AdminSessionsPage.jsx";
 import AdminStudyPage from "./admin/pages/AdminStudyPage.jsx";
 import AdminExportPage from "./admin/pages/AdminExportPage.jsx";
+import AdminResearchersPage from "./admin/pages/AdminResearchersPage.jsx";
+import AdminConditionsPage from "./admin/pages/AdminConditionsPage.jsx";
+import AdminQualityPage from "./admin/pages/AdminQualityPage.jsx";
+import ResearcherJoinPage from "./auth/ResearcherJoinPage.jsx";
+import JoinStudyPage from "./auth/JoinStudyPage.jsx";
 
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
@@ -121,6 +126,12 @@ export default function App() {
           }
         />
 
+        {/* ── Public researcher join route ────────────────────────────── */}
+        <Route path="/researcher/join/:token" element={<ResearcherJoinPage />} />
+
+        {/* ── Public participant join route ────────────────────────────── */}
+        <Route path="/join/:code" element={<JoinStudyPage />} />
+
         {/* ── Participant routes ──────────────────────────────────────────── */}
         <Route
           path="/dashboard/*"
@@ -210,6 +221,9 @@ export default function App() {
         <Route path="/admin/sessions" element={<RequireAdmin user={user} checking={checking}><AdminSessionsPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
         <Route path="/admin/study" element={<RequireAdmin user={user} checking={checking}><AdminStudyPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
         <Route path="/admin/export" element={<RequireAdmin user={user} checking={checking}><AdminExportPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
+        <Route path="/admin/researchers" element={<RequireAdmin user={user} checking={checking}><AdminResearchersPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
+        <Route path="/admin/conditions" element={<RequireAdmin user={user} checking={checking}><AdminConditionsPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
+        <Route path="/admin/quality" element={<RequireAdmin user={user} checking={checking}><AdminQualityPage user={user} onLogout={handleLogout} /></RequireAdmin>} />
 
         {/* ── Catch-all ───────────────────────────────────────────────────── */}
         <Route
