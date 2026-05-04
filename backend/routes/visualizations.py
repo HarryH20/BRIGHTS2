@@ -6,6 +6,7 @@ import sqlalchemy
 from flask import Blueprint, jsonify, request, session
 from models import db
 from routes.auth import login_required
+from cache import get_chart_cache, set_chart_cache, make_cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,14 @@ viz_bp = Blueprint("viz", __name__, url_prefix="/api/visualizations")
 def get_goals():
     """Return per-goal text and T2-T6 scores for the current user from survey_responses."""
     user_id = session["user_id"]
+
+    cache_key = make_cache_key(user_id, "goals")
+    cached = get_chart_cache(cache_key)
+    if cached is not None:
+        logger.info("Chart cache HIT: goals user=%s", user_id)
+        return jsonify(cached)
+
+    logger.info("Chart cache MISS: goals user=%s", user_id)
 
     try:
         with db.engine.connect() as conn:
@@ -38,7 +47,9 @@ def get_goals():
                           for row in text_result}
 
             if not goal_texts:
-                return jsonify({"goals": []})
+                empty = {"goals": []}
+                set_chart_cache(cache_key, empty)
+                return jsonify(empty)
 
             # Q39/Q40/Q41 scores for T2-T6
             score_result = conn.execute(
@@ -86,7 +97,9 @@ def get_goals():
             "timepoints": timepoints,
         })
 
-    return jsonify({"goals": goals_out})
+    result = {"goals": goals_out}
+    set_chart_cache(cache_key, result)
+    return jsonify(result)
 
 
 _ALLOWED_GRAPHS = {"roseplot", "radarplot"}
@@ -103,6 +116,16 @@ def serve_graph(graph_name):
         logger.warning("Graph module not in allowlist: %s", graph_name)
         return jsonify({"error": "Graph not found"}), 404
 
+    user_id = session["user_id"]
+    params = {**dict(request.args), "goal_id": str(request.args.get("goal_id", ""))}
+    cache_key = make_cache_key(user_id, graph_name, params)
+    cached = get_chart_cache(cache_key)
+    if cached is not None:
+        logger.info("Chart cache HIT: %s user=%s", graph_name, user_id)
+        return jsonify(cached)
+
+    logger.info("Chart cache MISS: %s user=%s", graph_name, user_id)
+
     try:
         module = importlib.import_module(f"analysis.{graph_name}")
     except ModuleNotFoundError as e:
@@ -111,7 +134,7 @@ def serve_graph(graph_name):
 
     start = time.time()
     try:
-        data = module.fetch_data(session["user_id"], db.engine, **request.args)
+        data = module.fetch_data(user_id, db.engine, **request.args)
         fig_dict = module.build_figure(data)
 
         duration_ms = (time.time() - start) * 1000
@@ -119,6 +142,7 @@ def serve_graph(graph_name):
         if duration_ms > 500:
             logger.warning("Slow chart generation: %s took %.1fms", graph_name, duration_ms)
 
+        set_chart_cache(cache_key, fig_dict)
         return jsonify(fig_dict)
     except Exception:
         logger.error("Failed to generate graph '%s'", graph_name, exc_info=True)

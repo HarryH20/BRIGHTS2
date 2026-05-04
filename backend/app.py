@@ -4,6 +4,14 @@ import time
 import uuid
 import logging
 
+from cache import (  # noqa: F401 — re-exported so `from app import` works
+    get_chart_cache,
+    set_chart_cache,
+    invalidate_user_chart_cache,
+    make_cache_key,
+    ADMIN_CHART_CACHE_TTL,
+)
+
 # Allow imports from the root analysis/ package
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -53,8 +61,16 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 _engine_options = {"pool_pre_ping": True}
 if _db_url and not _db_url.startswith("sqlite"):
     _engine_options["pool_recycle"] = 300
-    _engine_options["pool_size"] = 2
-    _engine_options["max_overflow"] = 2
+    _engine_options["pool_size"] = 5
+    _engine_options["max_overflow"] = 5
+    _engine_options["pool_timeout"] = 30
+    _engine_options["connect_args"] = {
+        "connect_timeout": 10,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 5,
+        "keepalives_count": 3,
+    }
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = _engine_options
 
 # Trust one layer of reverse proxy headers (nginx + Azure load balancer)

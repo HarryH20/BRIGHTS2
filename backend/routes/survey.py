@@ -9,6 +9,7 @@ from models import (
     FlagThresholdConfig,
 )
 from routes.auth import login_required, admin_required
+from cache import invalidate_user_chart_cache
 from analysis.data_quality import run_quality_checks, DEFAULT_THRESHOLDS
 
 logger = logging.getLogger(__name__)
@@ -291,6 +292,8 @@ def submit_survey():
 
         db.session.commit()
         logger.info("Survey T%s submitted: user=%s responses=%s", timepoint, user_id, len(responses))
+        invalidate_user_chart_cache(user_id)
+        invalidate_user_chart_cache("admin")
 
     except Exception:
         db.session.rollback()

@@ -23,6 +23,7 @@ from models import (
     ConsentForm, ConsentFormRevision, ParticipantConsent,
 )
 from routes.auth import admin_required, admin_or_researcher_required
+from cache import get_chart_cache, set_chart_cache, make_cache_key, ADMIN_CHART_CACHE_TTL
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,14 @@ def admin_roseplot():
     Returns the same Plotly figure dict format as /api/visualizations/roseplot,
     but aggregated across all users by default.
     """
+    params = dict(request.args)
+    cache_key = make_cache_key("admin", "roseplot", params)
+    cached = get_chart_cache(cache_key)
+    if cached is not None:
+        logger.info("Chart cache HIT: admin/roseplot")
+        return jsonify(cached), 200
+
+    logger.info("Chart cache MISS: admin/roseplot")
     try:
         admin_mod = importlib.import_module("analysis.admin_roseplot")
         rose_mod = importlib.import_module("analysis.roseplot")
@@ -71,6 +80,7 @@ def admin_roseplot():
             weeks=request.args.get("weeks"),
         )
         fig_dict = rose_mod.build_figure(data)
+        set_chart_cache(cache_key, fig_dict, ttl=ADMIN_CHART_CACHE_TTL)
         return jsonify(fig_dict), 200
     except Exception:
         logger.error("Failed to generate admin roseplot", exc_info=True)
@@ -330,10 +340,18 @@ def admin_alluvial():
     GET /api/admin/alluvial
     Returns the Plotly/Sankey payload for the admin-only alluvial chart.
     """
+    cache_key = make_cache_key("admin", "alluvial")
+    cached = get_chart_cache(cache_key)
+    if cached is not None:
+        logger.info("Chart cache HIT: admin/alluvial")
+        return jsonify(cached), 200
+
+    logger.info("Chart cache MISS: admin/alluvial")
     try:
         alluvial_mod = importlib.import_module("analysis.adminalluvial")
 
         fig_dict = alluvial_mod.build_figure(db.engine)
+        set_chart_cache(cache_key, fig_dict, ttl=ADMIN_CHART_CACHE_TTL)
         return jsonify(fig_dict), 200
     except Exception:
         logger.error("Failed to generate admin alluvial chart", exc_info=True)
@@ -347,10 +365,18 @@ def admin_linguisticmarkersplot():
     GET /api/admin/linguisticmarkersplot
     Returns the Plotly figure dict for the admin-only linguistic markers plot.
     """
+    cache_key = make_cache_key("admin", "linguisticmarkersplot")
+    cached = get_chart_cache(cache_key)
+    if cached is not None:
+        logger.info("Chart cache HIT: admin/linguisticmarkersplot")
+        return jsonify(cached), 200
+
+    logger.info("Chart cache MISS: admin/linguisticmarkersplot")
     try:
         linguistic_mod = importlib.import_module("analysis.linguisticmarkersplot")
 
         fig_dict = linguistic_mod.build_figure(db.engine)
+        set_chart_cache(cache_key, fig_dict, ttl=ADMIN_CHART_CACHE_TTL)
         return jsonify(fig_dict), 200
     except Exception:
         logger.error("Failed to generate admin linguistic markers plot", exc_info=True)
@@ -364,10 +390,18 @@ def admin_linguisticmarkerswordcloud():
     GET /api/admin/linguisticmarkerswordcloud
     Returns the Plotly figure dict for the admin-only linguistic markers word cloud.
     """
+    cache_key = make_cache_key("admin", "wordcloud")
+    cached = get_chart_cache(cache_key)
+    if cached is not None:
+        logger.info("Chart cache HIT: admin/wordcloud")
+        return jsonify(cached), 200
+
+    logger.info("Chart cache MISS: admin/wordcloud")
     try:
         wc_mod = importlib.import_module("analysis.linguisticmarkerswordcloud")
 
         fig_dict = wc_mod.build_figure(db.engine)
+        set_chart_cache(cache_key, fig_dict, ttl=ADMIN_CHART_CACHE_TTL)
         return jsonify(fig_dict), 200
     except Exception:
         logger.error("Failed to generate admin linguistic markers word cloud", exc_info=True)
@@ -420,6 +454,14 @@ def admin_counts_demographics():
     GET /api/admin/counts-demographics?demo_label=Gender
     Returns the Plotly figure dict for participant counts by demographic group.
     """
+    params = dict(request.args)
+    cache_key = make_cache_key("admin", "counts-demographics", params)
+    cached = get_chart_cache(cache_key)
+    if cached is not None:
+        logger.info("Chart cache HIT: admin/counts-demographics")
+        return jsonify(cached), 200
+
+    logger.info("Chart cache MISS: admin/counts-demographics")
     try:
         demo_mod = importlib.import_module("analysis.admin_counts_demographics")
 
@@ -428,6 +470,7 @@ def admin_counts_demographics():
             data,
             demo_label=request.args.get("demo_label", "Gender"),
         )
+        set_chart_cache(cache_key, fig_dict, ttl=ADMIN_CHART_CACHE_TTL)
         return jsonify(fig_dict), 200
     except Exception:
         logger.error("Failed to generate admin counts demographics chart", exc_info=True)
@@ -440,6 +483,14 @@ def admin_attrition_funnel():
     GET /api/admin/attrition-funnel?demo_key=Gender&grp_name=Female
     Returns the Plotly figure dict for participant attrition funnel.
     """
+    params = dict(request.args)
+    cache_key = make_cache_key("admin", "attrition-funnel", params)
+    cached = get_chart_cache(cache_key)
+    if cached is not None:
+        logger.info("Chart cache HIT: admin/attrition-funnel")
+        return jsonify(cached), 200
+
+    logger.info("Chart cache MISS: admin/attrition-funnel")
     try:
         mod = importlib.import_module("analysis.admin_attrition_funnel")
 
@@ -448,7 +499,7 @@ def admin_attrition_funnel():
             demo_key=request.args.get("demo_key", "Overall"),
             grp_name=request.args.get("grp_name", "All Participants"),
         )
-
+        set_chart_cache(cache_key, fig_dict, ttl=ADMIN_CHART_CACHE_TTL)
         return jsonify(fig_dict), 200
     except Exception:
         logger.error("Failed to generate attrition funnel", exc_info=True)
