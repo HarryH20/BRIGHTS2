@@ -241,7 +241,7 @@ class ClientConfig(db.Model):
     color_mode = db.Column(db.String(10), nullable=False, default="dark")
     border_radius = db.Column(db.String(20), nullable=False, default="12px")
     font_family = db.Column(db.Text, nullable=True)
-    chart_palette = db.Column(db.ARRAY(db.Text), nullable=True)
+    chart_palette = db.Column(db.JSON, nullable=True)
     support_email = db.Column(db.String(120), nullable=True)
     support_url = db.Column(db.Text, nullable=True)
     irb_number = db.Column(db.String(64), nullable=True)
