@@ -3,9 +3,9 @@ import importlib
 
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from sqlalchemy import func
-from models import AuditLog, SessionLog, User, db
+from models import AuditLog, Enrollment, SessionLog, Study, StudyRound, StudyTemplate, TemplateQuestion, User, db
 from routes.auth import admin_required
 
 logger = logging.getLogger(__name__)
@@ -413,3 +413,320 @@ def admin_attrition_funnel():
     except Exception:
         logger.error("Failed to generate attrition funnel", exc_info=True)
         return jsonify({"error": "Failed to generate admin visualization"}), 500
+
+
+# =============================================================================
+# Rounds management
+# =============================================================================
+
+_VALID_ROUND_TRANSITIONS = {
+    "draft": "enrolling",
+    "enrolling": "active",
+    "active": "closed",
+    "closed": "archived",
+}
+
+
+@admin_bp.route("/rounds", methods=["GET"])
+@admin_required
+def get_rounds():
+    """GET /api/admin/rounds — all rounds for the brights2 study, newest first."""
+    study = Study.query.filter_by(study_key="brights2").first()
+    if not study:
+        return jsonify({"rounds": []}), 200
+
+    rounds = (
+        StudyRound.query
+        .filter_by(study_id=study.id)
+        .order_by(StudyRound.round_number.desc())
+        .all()
+    )
+    result = []
+    for r in rounds:
+        participant_count = Enrollment.query.filter_by(round_id=r.id, status="active").count()
+        completion_count = Enrollment.query.filter_by(round_id=r.id, status="completed").count()
+        result.append({
+            **r.to_dict(),
+            "template": {
+                "id": r.template.id,
+                "name": r.template.name,
+                "template_key": r.template.template_key,
+            } if r.template else None,
+            "participant_count": participant_count,
+            "completion_count": completion_count,
+        })
+    return jsonify({"rounds": result}), 200
+
+
+@admin_bp.route("/rounds", methods=["POST"])
+@admin_required
+def create_round():
+    """POST /api/admin/rounds — create a new draft round for the brights2 study."""
+    data = request.get_json() or {}
+    study = Study.query.filter_by(study_key="brights2").first()
+    if not study:
+        return jsonify({"error": "Study not found"}), 404
+
+    max_num = (
+        db.session.query(func.max(StudyRound.round_number))
+        .filter_by(study_id=study.id)
+        .scalar() or 0
+    )
+
+    round_ = StudyRound(
+        study_id=study.id,
+        template_id=data.get("template_id"),
+        round_number=max_num + 1,
+        round_label=data.get("round_label"),
+        enrollment_opens_at=data.get("enrollment_opens_at"),
+        data_collection_ends_at=data.get("data_collection_ends_at"),
+        status="draft",
+    )
+    try:
+        db.session.add(round_)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to create round", exc_info=True)
+        return jsonify({"error": "Failed to create round"}), 500
+
+    return jsonify(round_.to_dict()), 201
+
+
+@admin_bp.route("/rounds/<int:round_id>/status", methods=["PATCH"])
+@admin_required
+def update_round_status(round_id):
+    """PATCH /api/admin/rounds/<id>/status — advance round through lifecycle."""
+    data = request.get_json() or {}
+    new_status = data.get("status", "").strip()
+
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    allowed_next = _VALID_ROUND_TRANSITIONS.get(round_.status)
+    if new_status != allowed_next:
+        return jsonify({
+            "error": f"Invalid transition: {round_.status} → {new_status}. Expected: {allowed_next}"
+        }), 400
+
+    try:
+        old_status = round_.status
+        round_.status = new_status
+        db.session.add(AuditLog(
+            user_id=session.get("user_id"),
+            event_type="ROUND_STATUS_CHANGE",
+            detail=f"Round {round_id}: {old_status} → {new_status}",
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to update round status round=%s", round_id, exc_info=True)
+        return jsonify({"error": "Failed to update status"}), 500
+
+    return jsonify(round_.to_dict()), 200
+
+
+# =============================================================================
+# Enrollment management
+# =============================================================================
+
+
+@admin_bp.route("/rounds/<int:round_id>/enrollments", methods=["GET"])
+@admin_required
+def get_enrollments(round_id):
+    """GET /api/admin/rounds/<id>/enrollments — list enrollments with user details."""
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    status_filter = request.args.get("status", "all")
+    query = Enrollment.query.filter_by(round_id=round_id)
+    if status_filter != "all":
+        query = query.filter(Enrollment.status == status_filter)
+
+    enrollments = query.all()
+    result = []
+    for e in enrollments:
+        user = db.session.get(User, e.user_id)
+        result.append({
+            "id": e.id,
+            "status": e.status,
+            "enrolled_at": e.enrolled_at.isoformat() if e.enrolled_at else None,
+            "completed_at": e.completed_at.isoformat() if e.completed_at else None,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "display_name": user.display_name,
+                "email": user.email,
+                "participant_id": user.participant_id,
+            } if user else None,
+        })
+    return jsonify({"enrollments": result}), 200
+
+
+@admin_bp.route("/rounds/<int:round_id>/enrollments", methods=["POST"])
+@admin_required
+def create_enrollment(round_id):
+    """POST /api/admin/rounds/<id>/enrollments — enroll one or many users."""
+    data = request.get_json() or {}
+    round_ = db.session.get(StudyRound, round_id)
+    if not round_:
+        return jsonify({"error": "Round not found"}), 404
+
+    user_ids = data.get("user_ids") or (
+        [data["user_id"]] if data.get("user_id") else []
+    )
+    if not user_ids:
+        return jsonify({"error": "user_id or user_ids required"}), 400
+
+    enrolled, skipped, errors = [], [], []
+
+    for uid in user_ids:
+        existing = Enrollment.query.filter_by(user_id=uid, status="active").first()
+        if existing:
+            current = db.session.get(StudyRound, existing.round_id)
+            errors.append({
+                "user_id": uid,
+                "reason": "User already has an active enrollment",
+                "current_round": (
+                    current.round_label or f"Round {current.round_number}"
+                ) if current else None,
+            })
+            skipped.append(uid)
+            continue
+
+        try:
+            enrollment = Enrollment(user_id=uid, round_id=round_id, status="active")
+            db.session.add(enrollment)
+            user = db.session.get(User, uid)
+            if user:
+                user.active_round_id = round_id
+            db.session.commit()
+            enrolled.append(uid)
+        except Exception:
+            db.session.rollback()
+            logger.error("Failed to enroll user=%s in round=%s", uid, round_id, exc_info=True)
+            errors.append({"user_id": uid, "reason": "Database error"})
+
+    return jsonify({"enrolled": enrolled, "skipped": skipped, "errors": errors}), 201
+
+
+@admin_bp.route("/rounds/<int:round_id>/enrollments/<int:enrollment_id>", methods=["DELETE"])
+@admin_required
+def withdraw_enrollment(round_id, enrollment_id):
+    """DELETE /api/admin/rounds/<id>/enrollments/<id> — soft-withdraw a participant."""
+    enrollment = db.session.get(Enrollment, enrollment_id)
+    if not enrollment or enrollment.round_id != round_id:
+        return jsonify({"error": "Enrollment not found"}), 404
+
+    try:
+        now = datetime.now(timezone.utc)
+        enrollment.status = "withdrawn"
+        enrollment.withdrawn_at = now
+        user = db.session.get(User, enrollment.user_id)
+        if user and user.active_round_id == round_id:
+            user.active_round_id = None
+        db.session.add(AuditLog(
+            user_id=session.get("user_id"),
+            event_type="ENROLLMENT_WITHDRAWN",
+            detail=f"Enrollment {enrollment_id} withdrawn from round {round_id} for user {enrollment.user_id}",
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to withdraw enrollment=%s", enrollment_id, exc_info=True)
+        return jsonify({"error": "Failed to withdraw enrollment"}), 500
+
+    return jsonify({"success": True}), 200
+
+
+@admin_bp.route(
+    "/rounds/<int:round_id>/enrollments/<int:enrollment_id>/complete",
+    methods=["POST"],
+)
+@admin_required
+def complete_enrollment(round_id, enrollment_id):
+    """POST /api/admin/rounds/<id>/enrollments/<id>/complete — researcher-initiated completion."""
+    enrollment = db.session.get(Enrollment, enrollment_id)
+    if not enrollment or enrollment.round_id != round_id:
+        return jsonify({"error": "Enrollment not found"}), 404
+
+    try:
+        now = datetime.now(timezone.utc)
+        enrollment.status = "completed"
+        enrollment.completed_at = now
+        user = db.session.get(User, enrollment.user_id)
+        if user and user.active_round_id == round_id:
+            user.active_round_id = None
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to complete enrollment=%s", enrollment_id, exc_info=True)
+        return jsonify({"error": "Failed to complete enrollment"}), 500
+
+    return jsonify({
+        "id": enrollment.id,
+        "status": enrollment.status,
+        "completed_at": enrollment.completed_at.isoformat() if enrollment.completed_at else None,
+        "user_id": enrollment.user_id,
+        "round_id": enrollment.round_id,
+    }), 200
+
+
+# =============================================================================
+# Template management
+# =============================================================================
+
+
+@admin_bp.route("/templates", methods=["GET"])
+@admin_required
+def get_templates():
+    """GET /api/admin/templates — all study templates, presets first."""
+    templates = (
+        StudyTemplate.query
+        .order_by(StudyTemplate.is_preset.desc(), StudyTemplate.created_at.desc())
+        .all()
+    )
+    result = []
+    for t in templates:
+        question_count = TemplateQuestion.query.filter_by(
+            template_id=t.id, status="active"
+        ).count()
+        d = t.to_dict()
+        d["question_count"] = question_count
+        result.append(d)
+    return jsonify({"templates": result}), 200
+
+
+@admin_bp.route("/templates/<int:template_id>/questions", methods=["GET"])
+@admin_required
+def get_template_questions(template_id):
+    """GET /api/admin/templates/<id>/questions — all questions for a template."""
+    template = db.session.get(StudyTemplate, template_id)
+    if not template:
+        return jsonify({"error": "Template not found"}), 404
+
+    questions = (
+        TemplateQuestion.query
+        .filter_by(template_id=template_id)
+        .order_by(TemplateQuestion.display_order)
+        .all()
+    )
+    return jsonify({
+        "questions": [
+            {
+                "id": q.id,
+                "variable_name": q.variable_name,
+                "question_text": q.question_text,
+                "scale_type": q.scale_type,
+                "timepoints": q.timepoints,
+                "scope": q.scope,
+                "display_order": q.display_order,
+                "is_required": q.is_required,
+                "config": q.config,
+                "status": q.status,
+            }
+            for q in questions
+        ]
+    }), 200

@@ -30,6 +30,7 @@ import AdminExportPage from "./admin/pages/AdminExportPage.jsx";
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  if (user.role === "admin") return <Navigate to="/admin" replace />;
   return children;
 }
 

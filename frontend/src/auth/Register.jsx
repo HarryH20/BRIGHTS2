@@ -73,6 +73,17 @@ export default function Register({ onRegistered, onGoToLogin }) {
           <p style={styles.subtitle}>Register with a username, email, and password.</p>
         </div>
 
+        <p style={{
+          fontSize: 13,
+          color: "var(--shell-text-muted, #8b9cbe)",
+          textAlign: "center",
+          marginTop: 4,
+          marginBottom: 16,
+        }}>
+          This creates a participant account. Researchers and admins use separate
+          accounts — contact your study coordinator if you need admin access.
+        </p>
+
         <label style={styles.label}>
           Username
           <input

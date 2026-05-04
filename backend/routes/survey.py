@@ -3,7 +3,7 @@ import os
 from datetime import timedelta
 
 from flask import Blueprint, jsonify, request, session
-from models import db, User, SurveyQuestion, SurveySubmission, SurveyResponse
+from models import db, User, SurveyQuestion, SurveySubmission, SurveyResponse, TemplateQuestion, Enrollment
 from routes.auth import login_required, admin_required
 
 logger = logging.getLogger(__name__)
@@ -64,13 +64,37 @@ def get_next_survey():
     Return the next due survey for the logged-in user.
 
     Response shapes:
+      { "status": "not_enrolled" }  — no active round assigned
+      { "status": "round_closed", "round_label": "...", "message": "..." }
       { "status": "locked", "next_unlocks_at": <iso>, "timepoint": N }
-      { "status": "complete" }   — all 6 timepoints done
-      { "status": "due", "timepoint": N, "form_type": "t1"|"t2"|"t3t5"|"t6",
-        "goals": [...],          — list of goal texts (from T1 submission or GoalIntervention)
-        "questions": [{ id, question_number, question_text, scale_type, display_order }, ...] }
+      { "status": "complete" }   — all timepoints done
+      { "status": "due", "timepoint": N, "form_type": "...",
+        "goals": [...], "questions": [...] }
     """
     user_id = session["user_id"]
+    user = db.session.get(User, user_id)
+
+    # Step 1 — Check active_round_id
+    active_round = user.active_round if user else None
+
+    if active_round is None:
+        return jsonify({
+            "status": "not_enrolled",
+            "message": "You are not currently enrolled in an active study. Contact your researcher if you believe this is an error.",
+        })
+
+    if active_round.status not in ("enrolling", "active"):
+        return jsonify({
+            "status": "round_closed",
+            "round_label": active_round.round_label or f"Round {active_round.round_number}",
+            "message": "This study round has ended. Your data has been saved.",
+        })
+
+    # Step 2 — Determine question source
+    tq_count = TemplateQuestion.query.filter_by(
+        template_id=active_round.template_id, status="active"
+    ).count()
+    use_template_questions = tq_count > 0
 
     # Find completed timepoints for this user, ordered
     submissions = (
@@ -100,6 +124,42 @@ def get_next_survey():
 
     form_type = _form_type(next_tp)
 
+    # Step 3 — Serve from template_questions
+    if use_template_questions:
+        questions = (
+            TemplateQuestion.query
+            .filter(
+                TemplateQuestion.template_id == active_round.template_id,
+                TemplateQuestion.status == "active",
+                TemplateQuestion.timepoints.contains([next_tp]),
+            )
+            .order_by(TemplateQuestion.display_order)
+            .all()
+        )
+
+        goals = _get_goal_texts(user_id, next_tp)
+
+        return jsonify({
+            "status": "due",
+            "timepoint": next_tp,
+            "form_type": form_type,
+            "goals": goals,
+            "round_id": active_round.id,
+            "round_label": active_round.round_label or f"Round {active_round.round_number}",
+            "template_name": active_round.template.name if active_round.template else None,
+            "questions": [
+                {
+                    "id": q.id,
+                    "question_number": q.display_order,
+                    "question_text": q.question_text,
+                    "scale_type": q.scale_type,
+                    "display_order": q.display_order,
+                }
+                for q in questions
+            ],
+        })
+
+    # Step 4 — Fallback: existing survey_questions logic (backward compatible)
     questions = (
         SurveyQuestion.query
         .filter_by(form_type=form_type, status="active")
@@ -145,6 +205,7 @@ def submit_survey():
     """
     user_id = session["user_id"]
     data = request.get_json()
+    user = db.session.get(User, user_id)
 
     if not data:
         return jsonify({"error": "Request body required"}), 400
@@ -169,6 +230,16 @@ def submit_survey():
         q.id for q in SurveyQuestion.query.filter_by(form_type=form_type, status="active").all()
     }
 
+    # Find active enrollment for round tracking
+    enrollment = None
+    if user and user.active_round_id:
+        enrollment = Enrollment.query.filter_by(
+            user_id=user_id,
+            round_id=user.active_round_id,
+            status="active",
+        ).first()
+
+    next_unlocks = None
     try:
         # Save individual responses
         for r in responses:
@@ -197,6 +268,8 @@ def submit_survey():
                 timepoint=timepoint,
                 question_id=qid,
                 response_value=sanitized_value,
+                round_id=user.active_round_id if user else None,
+                enrollment_id=enrollment.id if enrollment else None,
             ))
 
         # Record submission + set next unlock date (7 days), NULL for T6
@@ -205,6 +278,8 @@ def submit_survey():
             user_id=user_id,
             timepoint=timepoint,
             next_unlocks_at=next_unlocks,
+            round_id=user.active_round_id if user else None,
+            enrollment_id=enrollment.id if enrollment else None,
         ))
 
         db.session.commit()
@@ -214,6 +289,23 @@ def submit_survey():
         db.session.rollback()
         logger.error("Survey submit failed: user=%s T%s", user_id, timepoint, exc_info=True)
         return jsonify({"error": "Failed to save survey"}), 500
+
+    # After successful commit, check if all timepoints are complete and update enrollment
+    if enrollment and user and user.active_round_id:
+        completed_count = SurveySubmission.query.filter_by(user_id=user_id).count()
+        active_round = user.active_round
+        max_weeks = 6
+        if active_round and active_round.template:
+            max_weeks = active_round.template.num_weeks
+        if completed_count >= max_weeks:
+            try:
+                enrollment.status = "completed"
+                enrollment.completed_at = _utcnow()
+                user.active_round_id = None
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                logger.error("Failed to complete enrollment for user=%s", user_id, exc_info=True)
 
     return jsonify({
         "message": f"Timepoint {timepoint} submitted successfully.",

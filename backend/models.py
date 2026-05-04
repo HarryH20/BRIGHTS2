@@ -27,6 +27,16 @@ class User(db.Model):
     last_login = db.Column(db.DateTime, nullable=True)
     failed_attempts = db.Column(db.Integer, nullable=False, default=0)
     locked_until = db.Column(db.DateTime, nullable=True)
+    active_round_id = db.Column(
+        db.Integer,
+        db.ForeignKey("study_rounds.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    active_round = db.relationship(
+        "StudyRound",
+        foreign_keys="[User.active_round_id]",
+        backref="active_participants",
+    )
 
     def set_password(self, password):
         """Hash and store password."""
@@ -148,6 +158,16 @@ class SurveySubmission(db.Model):
     timepoint = db.Column(db.Integer, nullable=False)  # 1–6
     submitted_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     next_unlocks_at = db.Column(db.DateTime, nullable=True)  # submitted_at + 7 days; NULL for T6
+    round_id = db.Column(
+        db.Integer,
+        db.ForeignKey("study_rounds.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    enrollment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("enrollments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     def __repr__(self):
         return f"<SurveySubmission user={self.user_id} T{self.timepoint}>"
@@ -165,6 +185,16 @@ class SurveyResponse(db.Model):
     question_id = db.Column(db.Integer, db.ForeignKey("survey_questions.id"), nullable=False)
     response_value = db.Column(db.Text, nullable=True)  # stored as text; cast on read
     submitted_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    round_id = db.Column(
+        db.Integer,
+        db.ForeignKey("study_rounds.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    enrollment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("enrollments.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     def __repr__(self):
         return f"<SurveyResponse user={self.user_id} T{self.timepoint} G{self.goal_index} Q{self.question_id}>"
@@ -415,3 +445,224 @@ class ParticipantNote(db.Model):
 
     def __repr__(self):
         return f"<ParticipantNote participant={self.user_id} author={self.author_id} flagged={self.is_flagged}>"
+
+
+# =============================================================================
+# Round/enrollment models — added to support multi-round study management.
+# =============================================================================
+
+
+class StudyTemplate(db.Model):
+    """Reusable study design template defining question sets, schedule, and configuration."""
+
+    __tablename__ = "study_templates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    template_key = db.Column(db.Text, unique=True, nullable=False)
+    name = db.Column(db.Text, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    category = db.Column(db.Text, nullable=True)
+    num_weeks = db.Column(db.Integer, nullable=False, default=6)
+    week_lock_hours = db.Column(db.Integer, nullable=False, default=168)
+    is_preset = db.Column(db.Boolean, nullable=False, default=False)
+    is_archived = db.Column(db.Boolean, nullable=False, default=False)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    creator = db.relationship("User", foreign_keys=[created_by])
+    questions = db.relationship("TemplateQuestion", backref="template")
+    # rounds backref defined on StudyRound.template (backref='rounds' added there)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "template_key": self.template_key,
+            "name": self.name,
+            "description": self.description,
+            "category": self.category,
+            "num_weeks": self.num_weeks,
+            "week_lock_hours": self.week_lock_hours,
+            "is_preset": self.is_preset,
+            "is_archived": self.is_archived,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<StudyTemplate {self.template_key!r} preset={self.is_preset}>"
+
+
+class TemplateQuestion(db.Model):
+    """A question definition belonging to a study template, scoped to specific timepoints."""
+
+    __tablename__ = "template_questions"
+    __table_args__ = (db.UniqueConstraint("template_id", "variable_name"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(
+        db.Integer,
+        db.ForeignKey("study_templates.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    variable_name = db.Column(db.Text, nullable=False)
+    question_text = db.Column(db.Text, nullable=False)
+    scale_type = db.Column(db.Text, nullable=False, default="likert7")
+    timepoints = db.Column(db.ARRAY(db.Integer), nullable=False)
+    scope = db.Column(db.Text, nullable=False, default="per_goal")
+    display_order = db.Column(db.Integer, nullable=False, default=0)
+    is_required = db.Column(db.Boolean, nullable=False, default=True)
+    config = db.Column(db.JSON, nullable=True)
+    status = db.Column(db.Text, nullable=False, default="active")
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    def __repr__(self):
+        return f"<TemplateQuestion {self.variable_name!r} template={self.template_id} [{self.status}]>"
+
+
+class StudyRound(db.Model):
+    """A round of data collection within a study, linked to a template and its own enrollment cohort."""
+
+    __tablename__ = "study_rounds"
+
+    id = db.Column(db.Integer, primary_key=True)
+    study_id = db.Column(
+        db.Integer, db.ForeignKey("studies.id", ondelete="RESTRICT"), nullable=False
+    )
+    template_id = db.Column(
+        db.Integer,
+        db.ForeignKey("study_templates.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    round_number = db.Column(db.Integer, nullable=False, default=1)
+    round_label = db.Column(db.Text, nullable=True)
+    status = db.Column(
+        db.Text, nullable=False, default="draft"
+    )  # draft|enrolling|active|closed|archived
+    enrollment_opens_at = db.Column(db.DateTime, nullable=True)
+    enrollment_closes_at = db.Column(db.DateTime, nullable=True)
+    data_collection_ends_at = db.Column(db.DateTime, nullable=True)
+    schema_version = db.Column(db.Integer, nullable=False, default=1)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    study = db.relationship("Study", backref="rounds")
+    template = db.relationship("StudyTemplate", foreign_keys=[template_id], backref="rounds")
+    creator = db.relationship("User", foreign_keys=[created_by])
+    enrollments = db.relationship("Enrollment", backref="round")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "study_id": self.study_id,
+            "template_id": self.template_id,
+            "round_number": self.round_number,
+            "round_label": self.round_label,
+            "status": self.status,
+            "enrollment_opens_at": self.enrollment_opens_at.isoformat() if self.enrollment_opens_at else None,
+            "enrollment_closes_at": self.enrollment_closes_at.isoformat() if self.enrollment_closes_at else None,
+            "data_collection_ends_at": self.data_collection_ends_at.isoformat() if self.data_collection_ends_at else None,
+            "schema_version": self.schema_version,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<StudyRound study={self.study_id} round={self.round_number} [{self.status}]>"
+
+
+class Enrollment(db.Model):
+    """A participant's active enrollment in a specific study round."""
+
+    __tablename__ = "enrollments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    round_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    status = db.Column(
+        db.Text, nullable=False, default="active"
+    )  # active|withdrawn|completed|excluded
+    enrolled_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    withdrawn_at = db.Column(db.DateTime, nullable=True)
+    withdrawal_reason = db.Column(db.Text, nullable=True)
+    consent_version = db.Column(db.Text, nullable=True)
+
+    participant = db.relationship("User", foreign_keys=[user_id], backref="enrollments")
+    # round backref defined in StudyRound.enrollments relationship — do not redefine here
+
+    def __repr__(self):
+        return f"<Enrollment user={self.user_id} round={self.round_id} [{self.status}]>"
+
+
+class EnrollmentInvitation(db.Model):
+    """Invitation for a participant to join a study round."""
+
+    __tablename__ = "enrollment_invitations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    round_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="CASCADE"), nullable=False
+    )
+    invited_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status = db.Column(
+        db.Text, nullable=False, default="pending"
+    )  # pending|accepted|declined|expired
+    message = db.Column(db.Text, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    accepted_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    participant = db.relationship("User", foreign_keys=[user_id])
+    inviter = db.relationship("User", foreign_keys=[invited_by])
+    round = db.relationship("StudyRound", foreign_keys=[round_id])
+
+    def __repr__(self):
+        return f"<EnrollmentInvitation user={self.user_id} round={self.round_id} [{self.status}]>"
+
+
+class RoundComparison(db.Model):
+    """Saved comparison configuration between two study rounds for research analysis."""
+
+    __tablename__ = "round_comparisons"
+
+    id = db.Column(db.Integer, primary_key=True)
+    study_id = db.Column(
+        db.Integer, db.ForeignKey("studies.id", ondelete="CASCADE"), nullable=False
+    )
+    name = db.Column(db.Text, nullable=False)
+    round_a_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    round_b_id = db.Column(
+        db.Integer, db.ForeignKey("study_rounds.id", ondelete="RESTRICT"), nullable=False
+    )
+    notes = db.Column(db.Text, nullable=True)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+    study = db.relationship("Study", backref="comparisons")
+    round_a = db.relationship("StudyRound", foreign_keys=[round_a_id])
+    round_b = db.relationship("StudyRound", foreign_keys=[round_b_id])
+    creator = db.relationship("User", foreign_keys=[created_by])
+
+    def __repr__(self):
+        return f"<RoundComparison study={self.study_id} {self.round_a_id}v{self.round_b_id}>"

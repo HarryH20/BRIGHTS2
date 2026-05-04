@@ -8,7 +8,7 @@ import SurveyHeroCard from "./SurveyHeroCard.jsx";
 import OnboardingModal from "./OnboardingModal.jsx";
 import SkeletonCard from "../components/SkeletonCard.jsx";
 import SkeletonGoalCard from "../components/SkeletonGoalCard.jsx";
-import { Target } from "lucide-react";
+import { Target, ClipboardList } from "lucide-react";
 
 const ONBOARDED_KEY = "brights2_onboarded";
 
@@ -148,6 +148,46 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
         <OnboardingModal onClose={() => setShowOnboarding(false)} />
       )}
       <ParticipantShell user={user} onLogout={onLogout}>
+        {(surveyStatus === "not_enrolled" || surveyStatus === "round_closed") ? (
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            minHeight: "60vh",
+            textAlign: "center",
+            padding: "40px 24px",
+          }}>
+            <ClipboardList size={48} style={{ opacity: 0.3, color: "var(--shell-text-muted)" }} />
+            <h2 style={{
+              fontSize: 22,
+              fontWeight: 800,
+              color: "var(--shell-text)",
+              marginTop: 16,
+              marginBottom: 8,
+            }}>
+              {surveyStatus === "not_enrolled"
+                ? "Not currently enrolled"
+                : "This study round has ended"}
+            </h2>
+            <p style={{
+              fontSize: 15,
+              color: "var(--shell-text-secondary)",
+              maxWidth: 400,
+              lineHeight: 1.6,
+              margin: 0,
+            }}>
+              {surveyStatus === "not_enrolled"
+                ? "You are not enrolled in an active study. If you believe this is an error, contact your study coordinator."
+                : "Thank you for your participation. Your data has been saved."}
+            </p>
+            {surveyStatus === "round_closed" && (
+              <Link to="/overview" style={styles.ctaLink}>
+                View your results →
+              </Link>
+            )}
+          </div>
+        ) : (
         <div style={styles.page}>
 
           {/* 1. Greeting */}
@@ -271,6 +311,7 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
             <p style={styles.insight}>{processInsight}</p>
           )}
         </div>
+        )}
       </ParticipantShell>
     </>
   );

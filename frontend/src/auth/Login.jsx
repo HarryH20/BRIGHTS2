@@ -149,6 +149,17 @@ export default function Login({ onLogin, onGoToRegister }) {
           {loading ? "Signing in..." : "Sign in"}
         </button>
 
+        <p style={{
+          fontSize: 13,
+          color: "var(--shell-text-muted, #8b9cbe)",
+          textAlign: "center",
+          marginTop: 12,
+          marginBottom: 4,
+        }}>
+          If you are a researcher, use your admin credentials. Participant and
+          admin accounts are separate.
+        </p>
+
         <div style={styles.footer}>
           <button type="button" onClick={onGoToRegister} style={styles.linkBtn}>
             Create account

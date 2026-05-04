@@ -6,7 +6,7 @@ from functools import wraps
 from flask import Blueprint, request, jsonify, session, g
 import requests as http_req
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db, User, AuditLog, SessionLog
+from models import db, User, AuditLog, SessionLog, StudyRound
 from extensions import limiter
 
 # Used to equalise login timing when a username/email is not found,
@@ -375,6 +375,19 @@ def me():
         session.clear()
         return jsonify({"error": "User not found"}), 404
 
+    active_enrollment = None
+    if user.active_round_id:
+        round_ = db.session.get(StudyRound, user.active_round_id)
+        if round_:
+            active_enrollment = {
+                "round_id": round_.id,
+                "round_number": round_.round_number,
+                "round_label": round_.round_label,
+                "study_name": round_.study.study_name if round_.study else None,
+                "template_name": round_.template.name if round_.template else None,
+                "round_status": round_.status,
+            }
+
     return jsonify({
         "user": {
             "id": user.id,
@@ -385,7 +398,8 @@ def me():
             "avatar_url": user.avatar_url,
             "display_name": user.display_name,
             "created_at": user.created_at.isoformat(),
-            "last_login": user.last_login.isoformat() if user.last_login else None
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+            "active_enrollment": active_enrollment,
         }
     }), 200
 
