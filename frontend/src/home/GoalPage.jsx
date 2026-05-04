@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import ParticipantShell from "./ParticipantShell.jsx";
 import JourneyPath from "./JourneyPath.jsx";
 import RadarPlot from "../graphs/RadarPlot.jsx";
+import GoalTrajectorySparklines from "../graphs/GoalTrajectorySparklines.jsx";
 import { AlertCircle } from "lucide-react";
 
 const LIKERT = {
@@ -281,6 +282,16 @@ export default function GoalPage({ user, onLogout }) {
                 <div style={s.labelMuted}>Goal Traits Radar</div>
                 <div style={{ borderRadius: 12, border: "1px solid var(--subtle-border)", background: "#0b1220" }}>
                   <RadarPlot goalIndex={goalIndex} showHelper />
+                </div>
+              </div>
+            )}
+
+            {/* Goal trajectory sparklines */}
+            {goalIndex !== null && goal && (
+              <div style={{ marginTop: 22 }}>
+                <div style={s.labelMuted}>Goal Trajectory</div>
+                <div style={{ borderRadius: 12, border: "1px solid var(--subtle-border)", background: "#0b1220", padding: "14px 16px" }}>
+                  <GoalTrajectorySparklines goals={[goal]} />
                 </div>
               </div>
             )}
