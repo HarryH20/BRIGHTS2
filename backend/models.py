@@ -890,7 +890,6 @@ class ConsentForm(db.Model):
     title = db.Column(db.Text, nullable=False)
     is_active = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
-    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     study = db.relationship("Study", backref="consent_forms")
     revisions = db.relationship(
@@ -907,7 +906,6 @@ class ConsentForm(db.Model):
             "title": self.title,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
     def __repr__(self):

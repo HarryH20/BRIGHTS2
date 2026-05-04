@@ -12,27 +12,40 @@ export const queryClient = new QueryClient({
 });
 
 export async function apiFetch(path, options = {}) {
-  const res = await fetch(path, {
-    credentials: "include",
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-  if (res.status === 401) {
-    window.location.href = "/login";
-    return;
-  }
+  try {
+    const res = await fetch(path, {
+      credentials: "include",
+      signal: controller.signal,
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+    clearTimeout(timeoutId);
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body?.error || `Request failed: ${res.status}`);
-    err.status = res.status;
-    err.body = body;
+    if (res.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const err = new Error(body?.error || `Request failed: ${res.status}`);
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+
+    return res.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === "AbortError") {
+      throw new Error("Request timed out. Please refresh the page.");
+    }
     throw err;
   }
-
-  return res.json();
 }

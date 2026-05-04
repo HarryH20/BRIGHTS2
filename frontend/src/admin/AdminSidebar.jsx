@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, User, Target, BarChart3, MessageSquare,
   GitMerge, FileText, TrendingUp, FlaskConical, Shield, Download,
-  ChevronLeft, ChevronRight, ArrowLeft, LogOut, UserCheck, ShieldAlert, Shuffle,
+  ChevronLeft, ChevronRight, LogOut, UserCheck, ShieldAlert, Shuffle,
 } from "lucide-react";
 
 const NAV_GROUPS = [
@@ -164,13 +164,6 @@ export default function AdminSidebar({ user, onLogout }) {
 
       {/* Footer */}
       <div style={s.footer}>
-        <SidebarTooltip label="View as Participant" collapsed={collapsed}>
-          <Link to="/dashboard" style={{ ...s.footerLink, justifyContent: collapsed ? "center" : "flex-start" }}>
-            <ArrowLeft size={14} style={{ flexShrink: 0 }} />
-            {!collapsed && <span>View as Participant</span>}
-          </Link>
-        </SidebarTooltip>
-
         <div style={{ ...s.userRow, justifyContent: collapsed ? "center" : "flex-start" }}>
           <div style={s.avatar}>
             {(user?.display_name || user?.username || "A")[0].toUpperCase()}

@@ -813,27 +813,36 @@ def join_landing(code):
             "status": round_.status,
         }), 409
 
-    token = _issue_pending_token(round_.id, code, request)
+    try:
+        token = _issue_pending_token(round_.id, code, request)
+    except Exception as e:
+        logger.error("Failed to issue pending token for round=%s: %s", round_.id, str(e))
+        return jsonify({"error": "Failed to generate join token. Please try again."}), 500
 
     consent_data = None
-    consent = ConsentForm.query.filter_by(
-        study_id=round_.study_id, is_active=True
-    ).first()
-    if consent:
-        revision = (
-            ConsentFormRevision.query
-            .filter_by(consent_form_id=consent.id)
-            .order_by(ConsentFormRevision.created_at.desc())
-            .first()
-        )
-        if revision:
-            consent_data = {
-                "form_id": consent.id,
-                "version": revision.version,
-                "title": consent.title,
-                "body_markdown": revision.body_markdown,
-                "irb_number": revision.irb_approval_number,
-            }
+    try:
+        consent = ConsentForm.query.filter_by(
+            study_id=round_.study_id, is_active=True
+        ).first()
+        if consent:
+            revision = (
+                ConsentFormRevision.query
+                .filter_by(consent_form_id=consent.id)
+                .order_by(ConsentFormRevision.created_at.desc())
+                .first()
+            )
+            if revision:
+                consent_data = {
+                    "form_id": consent.id,
+                    "version": revision.version,
+                    "title": consent.title,
+                    "body_markdown": revision.body_markdown,
+                    "irb_number": revision.irb_approval_number,
+                }
+    except Exception as e:
+        logger.warning("Could not load consent form for join route: %s", str(e))
+        consent_data = None
+        # Continue without consent — do not 500
 
     return jsonify({
         "round_id": round_.id,

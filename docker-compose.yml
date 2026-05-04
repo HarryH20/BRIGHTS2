@@ -48,6 +48,7 @@ services:
     environment:
       - FLASK_ENV=development
       - LOG_DIR=/app/logs
+      - APP_PUBLIC_URL=http://localhost:3000
     env_file:
       - .env
     dns:

@@ -34,6 +34,24 @@ def _generate_join_code():
     alphabet = string.ascii_uppercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
+
+def _build_public_url(path):
+    """
+    Build a public-facing URL.
+    Uses APP_PUBLIC_URL env var if set, otherwise reconstructs from
+    X-Forwarded-Host header (set by nginx), falling back to request.host_url.
+    """
+    import os as _os
+    base = _os.environ.get("APP_PUBLIC_URL", "").rstrip("/")
+    if not base:
+        forwarded_host = request.headers.get("X-Forwarded-Host")
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "http")
+        if forwarded_host:
+            base = f"{forwarded_proto}://{forwarded_host}"
+        else:
+            base = request.host_url.rstrip("/")
+    return f"{base}/{path.lstrip('/')}"
+
 @admin_bp.route("/roseplot", methods=["GET"])
 @admin_required
 def admin_roseplot():
@@ -865,7 +883,7 @@ def invite_researcher():
         logger.error("Failed to create researcher invitation", exc_info=True)
         return jsonify({"error": "Failed to create invitation"}), 500
 
-    invite_url = request.host_url.rstrip("/") + "/researcher/join/" + raw_token
+    invite_url = _build_public_url(f"researcher/join/{raw_token}")
     return jsonify({
         "invite_url": invite_url,
         "role": role,
@@ -1178,6 +1196,15 @@ NOTIFICATION_TEMPLATES = {
         'title': 'Study complete — thank you',
         'body': ('You have completed all {weeks} weeks of '
                  '{study_name}. Thank you for your participation.'),
+    },
+    'welcome': {
+        'title': 'Welcome to {study_name}',
+        'body': ('You are now enrolled in {study_name}. '
+                 'Your first survey will be available shortly.'),
+    },
+    'study_update': {
+        'title': 'Study update',
+        'body': 'There is an update regarding your study participation.',
     },
     'general': {
         'title': '{title}',
@@ -1642,19 +1669,20 @@ def get_user_enrollment(user_id):
 @admin_bp.route("/rounds/<int:round_id>/notify", methods=["POST"])
 @admin_required
 def send_notifications(round_id):
-    """POST /api/admin/rounds/<id>/notify — send notification to all active participants."""
+    """POST /api/admin/rounds/<id>/notify — batch-send notification to all active participants."""
     round_ = db.session.get(StudyRound, round_id)
     if not round_:
         return jsonify({"error": "Round not found"}), 404
 
     data = request.get_json() or {}
-    notif_type = data.get("notif_type", "general")
+    # Accept both 'type' (frontend) and 'notif_type' (legacy) keys
+    notif_type = data.get("type") or data.get("notif_type", "general")
     week = data.get("week", 1)
     closes_at = data.get("closes_at", "")
-    message = data.get("message", "")
+    body_override = data.get("body_override", "")
 
     if notif_type not in NOTIFICATION_TEMPLATES:
-        return jsonify({"error": "Invalid notif_type"}), 400
+        return jsonify({"error": f"Invalid type. Must be one of: {sorted(NOTIFICATION_TEMPLATES)}"}), 400
 
     tmpl = NOTIFICATION_TEMPLATES[notif_type]
     study_name = round_.study.study_name if round_.study else "the study"
@@ -1663,39 +1691,85 @@ def send_notifications(round_id):
     fmt = {
         "week": week, "closes": closes_at, "date": closes_at,
         "study_name": study_name, "weeks": num_weeks,
-        "title": message, "body": message,
+        "title": body_override, "body": body_override,
     }
     title = tmpl["title"].format(**fmt)
-    body = tmpl["body"].format(**fmt)
-
+    body = body_override.strip() if body_override.strip() else tmpl["body"].format(**fmt)
     action_url = "/survey" if "survey" in notif_type else "/dashboard"
+    now = datetime.now(timezone.utc)
 
     enrollments = Enrollment.query.filter_by(round_id=round_id, status='active').all()
-    sent = 0
-    skipped = 0
+    if not enrollments:
+        return jsonify({"sent": 0, "skipped": 0}), 200
 
+    # Bulk-fetch reminder preferences to avoid N queries
+    user_ids = [e.user_id for e in enrollments]
+    disabled_reminder_users = set()
+    if notif_type == 'survey_reminder':
+        prefs = NotificationPreference.query.filter(
+            NotificationPreference.user_id.in_(user_ids),
+            NotificationPreference.reminders_enabled == False,  # noqa: E712
+        ).all()
+        disabled_reminder_users = {p.user_id for p in prefs}
+
+    # Build enrollment condition lookup (already fetched — no extra query)
+    condition_by_user = {e.user_id: e.condition_label for e in enrollments}
+
+    # Build all Notification objects (no session.add in loop)
+    notifications_list = []
+    skipped = 0
     for enrollment in enrollments:
-        n = _create_notification(
+        if enrollment.user_id in disabled_reminder_users:
+            skipped += 1
+            continue
+        notifications_list.append(Notification(
             user_id=enrollment.user_id,
-            notif_type=notif_type,
+            round_id=round_id,
+            type=notif_type,
             title=title,
             body=body,
-            round_id=round_id,
             action_url=action_url,
-        )
-        if n is None:
-            skipped += 1
-        else:
-            sent += 1
+            is_read=False,
+            created_at=now,
+        ))
+
+    if not notifications_list:
+        return jsonify({"sent": 0, "skipped": skipped}), 200
 
     try:
+        # add_all + flush assigns IDs in a single batch roundtrip
+        db.session.add_all(notifications_list)
+        db.session.flush()
+
+        # Build delivery logs with the now-available IDs
+        delivery_logs = [
+            NotificationDeliveryLog(
+                notification_id=n.id,
+                user_id=n.user_id,
+                round_id=round_id,
+                condition_label=condition_by_user.get(n.user_id),
+                notification_type=notif_type,
+                delivered_at=now,
+            )
+            for n in notifications_list
+        ]
+        db.session.add_all(delivery_logs)
         db.session.commit()
     except Exception:
         db.session.rollback()
         logger.error("Failed to send notifications for round=%s", round_id, exc_info=True)
         return jsonify({"error": "Failed to send notifications"}), 500
 
-    return jsonify({"sent": sent, "skipped": skipped}), 200
+    # Push SSE only to users who have an active stream connection
+    try:
+        from routes.auth import _sse_subscribers, _push_notification, _notif_dict
+        for n in notifications_list:
+            if n.user_id in _sse_subscribers:
+                _push_notification(n.user_id, _notif_dict(n))
+    except Exception:
+        pass
+
+    return jsonify({"sent": len(notifications_list), "skipped": skipped}), 200
 
 
 # =============================================================================
