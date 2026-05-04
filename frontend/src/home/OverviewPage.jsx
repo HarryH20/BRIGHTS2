@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import HomeLayout from "./HomeLayout.jsx";
+import React, { useEffect, useState } from "react";
+import ParticipantShell from "./ParticipantShell.jsx";
 import RosePlot from "../graphs/RosePlot.jsx";
 import LoadingScreen from "./LoadingScreen.jsx";
 
@@ -52,38 +51,10 @@ export default function OverviewPage({ user, onLogout }) {
       .catch(() => {});
   }, [goalFilter, weekFilter, ready]);
 
-  const subtitle = useMemo(() => {
-    const selectedGoal =
-      goalFilter === "all"
-        ? "All Goals"
-        : goals.find((g) => String(g.goal_id) === String(goalFilter))?.text ||
-          `Goal ${goalFilter}`;
-
-    const selectedWeeks =
-      weekFilter === "all"
-        ? "All Weeks"
-        : weekFilter === "2-6"
-        ? "Weeks 2–6"
-        : weekFilter === "3-6"
-        ? "Weeks 3–6"
-        : weekFilter === "4-6"
-        ? "Weeks 4–6"
-        : weekFilter === "5-6"
-        ? "Weeks 5–6"
-        : `Weeks ${weekFilter}`;
-
-    return `Filters: ${selectedGoal}, ${selectedWeeks}`;
-  }, [goalFilter, weekFilter, goals]);
-
   if (!ready) return <LoadingScreen status={loadingStatus} />;
 
   return (
-    <HomeLayout
-      user={user}
-      onLogout={onLogout}
-      title="Overview"
-      rightSlot={<span style={pill}>{subtitle}</span>}
-    >
+    <ParticipantShell user={user} onLogout={onLogout}>
       <div style={card}>
         <div style={row}>
           <label style={label}>
@@ -117,16 +88,13 @@ export default function OverviewPage({ user, onLogout }) {
             </select>
           </label>
 
-          <Link to="/dashboard" style={pillBtn}>
-            Back to Dashboard
-          </Link>
         </div>
 
         <div style={plotWrap}>
           <RosePlot figure={filteredRoseFigure || roseFigure} />
         </div>
       </div>
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 
@@ -162,25 +130,6 @@ const select = {
   background: "var(--ghost-bg)",
   color: "var(--ghost-color)",
   outline: "none",
-};
-
-const pillBtn = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "1px solid var(--ghost-border)",
-  background: "var(--ghost-bg)",
-  color: "var(--ghost-color)",
-  fontWeight: 900,
-  textDecoration: "none",
-};
-
-const pill = {
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  border: "1px solid var(--ghost-border)",
-  background: "var(--ghost-bg)",
-  color: "var(--ghost-color)",
 };
 
 const plotWrap = {

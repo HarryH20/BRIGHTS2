@@ -23,11 +23,9 @@ Notes
 - Missing values are space strings ' ' — caught with str(v).strip() != ''.
 - Valid participant IDs are 32-char hex strings.
 - Age is a raw integer in the DB; binned into 18–24 … 65+ here.
-- Groups with fewer than 10 participants are excluded from breakdowns.
+- All groups are included. Groups with no participants show zeros.
 """
 
-import re
-from sqlalchemy import text
 import re
 from sqlalchemy import text
 import plotly.graph_objects as go
@@ -84,7 +82,8 @@ RELIGION_MAP = {
 DEMO_ORDER = {
     "Overall":   ["All Participants"],
     "Condition": ["Purpose Outcome Obstacle Plan", "Goal Outcome Obstacle Plan", "Control"],
-    "Gender":    ["Male", "Female", "Non-binary", "Other", "Prefer not to say"],
+    "Gender":    ["Male", "Female", "Non-binary", "Transgender", "Cisgender",
+                  "Genderqueer", "Agender", "Other", "Prefer not to say"],
     "Age":       AGE_LABELS,
     "Race":      list(dict.fromkeys(RACE_MAP.values())),  # deduplicated, insertion-ordered
     "Education": ["Some high school", "HS graduate", "Some college",
@@ -229,8 +228,10 @@ def fetch_data(engine):
                 pid for pid, demos in participant_demos.items()
                 if demos.get(demo_field) == lbl
             }
-            if len(id_set) >= 10:
+            if id_set:
                 result[lbl] = attrition_for(id_set)
+            else:
+                result[lbl] = [0, 0, 0, 0, 0, 0]
         return result
 
     attrition = {
@@ -282,7 +283,7 @@ def build_figure(engine, demo_key="Overall", grp_name="All Participants"):
             font=dict(color=FONT_COL),
             height=540,
         )
-        return fig.to_dict()
+        return {**fig.to_dict(), "demo_order": demo_order}
 
     if not grp_name or grp_name not in attrition[demo_key]:
         grp_name = available_groups[0]
@@ -334,4 +335,4 @@ def build_figure(engine, demo_key="Overall", grp_name="All Participants"):
         margin=dict(t=100, b=60, l=80, r=40),
     )
 
-    return fig.to_dict()
+    return {**fig.to_dict(), "demo_order": demo_order}

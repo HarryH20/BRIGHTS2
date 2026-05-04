@@ -1,6 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Link } from "react-router-dom";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
 
 export default function Profile({ user, onLogout, onUserUpdate }) {
   // ---------- change password ----------
@@ -106,7 +105,7 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
   }
 
   return (
-    <HomeLayout user={user} onLogout={onLogout} title="Profile / Settings">
+    <ParticipantShell user={user} onLogout={onLogout} title="Profile / Settings">
       <div style={styles.card}>
         {/* Basic Info */}
         <section style={styles.section}>
@@ -252,13 +251,8 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
           </form>
         </section>
 
-        <div style={{ marginTop: 20 }}>
-          <Link to="/dashboard" style={styles.backLink}>
-            ← Back to Dashboard
-          </Link>
-        </div>
       </div>
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 
@@ -309,6 +303,7 @@ const styles = {
     border: "1px solid var(--input-border-glass)",
     color: "var(--text-primary)",
     marginBottom: 10,
+    fontSize: 16,
   },
 
   passwordGrid: {
@@ -345,11 +340,5 @@ const styles = {
 
   msg: {
     fontSize: 13,
-  },
-
-  backLink: {
-    color: "var(--ghost-color)",
-    fontWeight: 800,
-    textDecoration: "none",
   },
 };

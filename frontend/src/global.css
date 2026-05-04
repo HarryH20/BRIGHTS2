@@ -1,7 +1,29 @@
+/* Tailwind v4 entry — must be first */
+@import "tailwindcss";
+
 /* ─────────────────────────────────────────────
    Global interactive polish
    Layered on top of inline styles — additive only
    ───────────────────────────────────────────── */
+
+/* ── Tailwind theme bridge: maps existing CSS vars to Tailwind utilities ── */
+/* This means both style={{ background: 'var(--card-bg)' }} and            */
+/* className="bg-card" work and resolve to the same value.                  */
+@theme inline {
+  --color-card:        var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-header:      var(--header-bg);
+  --color-page:        var(--page-bg);
+  --color-accent:      var(--accent);
+  --color-ghost:       var(--ghost-bg);
+  --color-ghost-border: var(--ghost-border);
+  --color-surface:     var(--surface-subtle);
+  --color-text:        var(--text-primary);
+  --color-text-dim:    var(--text-dim);
+  --color-input:       var(--input-bg);
+  --color-success:     var(--success-color);
+  --color-error:       var(--error-color);
+}
 
 /* ── Theme tokens ──────────────────────────── */
 :root {
@@ -26,27 +48,6 @@
   --ghost-color: rgba(233, 238, 252, 0.92);
 }
 
-[data-theme="light"] {
-  --page-bg: radial-gradient(1200px 600px at 20% 0%, #dde8ff 0%, #f0f4ff 55%, #f8f9fe 100%);
-  --auth-page-bg: #f0f4ff;
-  --card-bg: rgba(255, 255, 255, 0.75);
-  --header-bg: rgba(255, 255, 255, 0.85);
-  --auth-card-bg: #ffffff;
-  --auth-card-border: #c8d4f0;
-  --input-bg: #f0f4ff;
-  --input-bg-glass: rgba(0, 0, 0, 0.04);
-  --input-border: #c0cce8;
-  --input-border-glass: rgba(0, 0, 0, 0.1);
-  --surface-subtle: rgba(0, 0, 0, 0.025);
-  --card-border: rgba(79, 124, 255, 0.18);
-  --header-border: rgba(79, 124, 255, 0.2);
-  --subtle-border: rgba(79, 124, 255, 0.12);
-  --text-primary: #0f172a;
-  --text-dim: rgba(15, 23, 42, 0.6);
-  --ghost-bg: rgba(0, 0, 0, 0.05);
-  --ghost-border: rgba(0, 0, 0, 0.12);
-  --ghost-color: rgba(15, 23, 42, 0.88);
-}
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -63,6 +64,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* ── Tabular numerics utility ─────────────── */
+.tabular-nums {
+  font-variant-numeric: tabular-nums slashed-zero;
 }
 
 /* ── Buttons ────────────────────────────────── */
@@ -156,7 +163,224 @@ select option {
   color: #e9eefc;
 }
 
-[data-theme="light"] select option {
-  background: #f0f4ff;
-  color: #0f172a;
+
+/* ── Accessibility utilities ────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Responsive utilities ─────────────────────────────────────────────────── */
+
+/* Dashboard 12-col grid → single col on narrow viewports */
+@media (max-width: 768px) {
+  .grid12 > * {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+/* Filter rows → vertical stack on mobile */
+@media (max-width: 640px) {
+  .filtersRowMobile {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+}
+
+/* Survey progress tracker: 6-col → 3-col → 2-col */
+@media (max-width: 768px) {
+  .trackerRowMobile {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+@media (max-width: 480px) {
+  .trackerRowMobile {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Survey due banner → stacked on mobile */
+@media (max-width: 640px) {
+  .survey-banner-mobile {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+}
+
+/* Nav brand: responsive text */
+.brand-short { display: none; }
+
+@media (max-width: 768px) {
+  .brand-full  { display: none; }
+  .brand-short { display: inline; }
+}
+
+/* Nav labels: icon-only on very narrow screens */
+@media (max-width: 600px) {
+  .nav-label { display: none; }
+  .home-nav .nav-item { gap: 0 !important; padding: 7px 9px !important; }
+}
+
+/* Home main content: tighter padding on mobile */
+@media (max-width: 640px) {
+  .home-main {
+    padding: 12px !important;
+  }
+}
+
+/* GoalPage sparkline summary cards: stack on mobile */
+@media (max-width: 560px) {
+  .sparkRowMobile {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Likert buttons: compact numbered circles on desktop; full-width labeled pills on mobile */
+.likert-btn-label {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .likert-row {
+    flex-direction: column !important;
+    gap: 6px !important;
+    align-items: stretch !important;
+  }
+  .likert-end-label {
+    display: none !important;
+  }
+  .likert-buttons-inner {
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+  .likert-btn {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    height: auto !important;
+    min-height: 44px !important;
+    padding: 10px 16px !important;
+    gap: 10px !important;
+    border-radius: 10px !important;
+  }
+  .likert-btn-num {
+    min-width: 22px;
+    text-align: center;
+  }
+  .likert-btn-label {
+    display: inline !important;
+    opacity: 0.85;
+    font-size: 13px;
+    font-weight: 500;
+  }
+}
+
+/* Survey form nav row → stacked full-width on very small screens */
+@media (max-width: 480px) {
+  .survey-nav-row {
+    flex-direction: column-reverse !important;
+    gap: 10px !important;
+  }
+  .survey-nav-row > * {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+/* Success card pop-in animation */
+@keyframes success-pop {
+  from { opacity: 0; transform: scale(0.95) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+.success-card {
+  animation: success-pop 0.4s ease forwards;
+}
+
+@keyframes check-bounce {
+  0%   { transform: scale(0.5); opacity: 0; }
+  70%  { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+.success-icon {
+  display: inline-block;
+  animation: check-bounce 0.5s ease 0.1s both;
+}
+
+/* Goal name CSS tooltip (replaces native title="" browser tooltip) */
+.goal-name-wrapper {
+  position: relative;
+  cursor: default;
+}
+
+.goal-name-wrapper .goal-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 400;
+  padding: 6px 10px;
+  border-radius: 8px;
+  white-space: normal;
+  max-width: 220px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  pointer-events: none;
+}
+
+.goal-name-wrapper:hover .goal-tooltip {
+  display: block;
+}
+
+/* ── ParticipantShell responsive ─────────────────────────────────────────── */
+
+/* Desktop: show nav pills, hide bottom nav */
+@media (min-width: 768px) {
+  .participant-bottom-nav {
+    display: none !important;
+  }
+  .participant-main {
+    padding-bottom: 0 !important;
+  }
+}
+
+/* Mobile: hide desktop nav pills and name label, show bottom nav */
+@media (max-width: 767px) {
+  .participant-desktop-nav {
+    display: none !important;
+  }
+  .participant-name-label {
+    display: none !important;
+  }
+  .participant-main {
+    padding-bottom: 72px;
+  }
+}
+
+/* Hover polish for bottom tab links (override global a:hover) */
+.participant-bottom-nav a:hover {
+  transform: none;
+  box-shadow: none;
+  filter: none;
+  color: var(--shell-accent);
+}
+
+/* Pill nav hover state */
+.participant-desktop-nav a:hover {
+  background: var(--shell-surface-2) !important;
+  color: var(--shell-text) !important;
+  transform: none;
+  box-shadow: none;
+  filter: none;
 }

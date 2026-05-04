@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState } from "react";
-import Plot from "react-plotly.js";
+import ReactECharts from "echarts-for-react";
+import AppErrorBoundary from "../components/ErrorBoundary.jsx";
+import AdminChartWrapper from "../components/AdminChartWrapper.jsx";
+import { alluvialToEcharts } from "../lib/plotlyToEcharts.js";
 
-export default function AdminAlluvial({ figure: prefetchedFigure }) {
-  const [figure, setFigure] = useState(prefetchedFigure ?? null);
-  const [loading, setLoading] = useState(prefetchedFigure === undefined);
-  const [error, setError] = useState("");
+function AdminAlluvialInner({ figure: prefetchedFigure }) {
+  const [figure,             setFigure]             = useState(prefetchedFigure ?? null);
+  const [loading,            setLoading]            = useState(prefetchedFigure === undefined);
+  const [error,              setError]              = useState("");
   const [selectedTransition, setSelectedTransition] = useState("");
+  const [selectedCondition,  setSelectedCondition]  = useState(0);
+  const [selectedQuestion,   setSelectedQuestion]   = useState(null);
 
   useEffect(() => {
     if (prefetchedFigure !== undefined) {
@@ -15,45 +20,24 @@ export default function AdminAlluvial({ figure: prefetchedFigure }) {
     }
 
     let cancelled = false;
+    setLoading(true);
+    setError("");
 
-    async function loadFigure() {
-      try {
-        setLoading(true);
-        setError("");
+    fetch("/api/admin/alluvial", { credentials: "include" })
+      .then(res => res.json().then(d => ({ ok: res.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) throw new Error(d.error || "Failed to load alluvial charts");
+        if (!cancelled) { setFigure(d); setError(""); }
+      })
+      .catch(err => { if (!cancelled) setError(err.message || "Failed to load alluvial charts"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
 
-        const response = await fetch("/api/admin/alluvial", {
-          credentials: "include",
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || "Failed to load admin alluvial charts");
-        }
-
-        if (!cancelled) {
-          setFigure(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message || "Failed to load admin alluvial charts");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadFigure();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [prefetchedFigure]);
 
-  const transitions = figure?.transitions ?? [];
-  const figuresByTransition = figure?.figures ?? {};
+  const transitions  = figure?.transitions ?? [];
+  const conditions   = figure?.conditions  ?? [{ label: "All Conditions", value: 0 }];
+  const figuresByKey = figure?.figures     ?? {};
 
   useEffect(() => {
     if (!selectedTransition && transitions.length > 0) {
@@ -62,215 +46,148 @@ export default function AdminAlluvial({ figure: prefetchedFigure }) {
   }, [transitions, selectedTransition]);
 
   const currentFigures = useMemo(() => {
-    if (!selectedTransition) {
-      return [];
+    if (!selectedTransition) return [];
+    const key = `${selectedTransition}_C${selectedCondition}`;
+    return figuresByKey[key] ?? [];
+  }, [figuresByKey, selectedTransition, selectedCondition]);
+
+  // Reset question to first available when transition or condition changes
+  useEffect(() => {
+    if (currentFigures.length > 0) {
+      setSelectedQuestion(currentFigures[0].q_num);
     }
-    return figuresByTransition[selectedTransition] ?? [];
-  }, [figuresByTransition, selectedTransition]);
+  }, [selectedTransition, selectedCondition]);
 
-  if (loading) {
-    return <div style={styles.stateBox}>Loading admin alluvial charts...</div>;
-  }
+  const currentItem = useMemo(() => {
+    if (!selectedQuestion) return currentFigures[0] ?? null;
+    return currentFigures.find(f => f.q_num === selectedQuestion) ?? currentFigures[0] ?? null;
+  }, [currentFigures, selectedQuestion]);
 
-  if (error) {
-    return <div style={styles.errorBox}>{error}</div>;
-  }
+  const rawOption = currentItem ? alluvialToEcharts(currentItem.figure) : null;
+  // Suppress the chart's internal generic title — card header + stats row provide context
+  const option = rawOption ? { ...rawOption, title: { show: false } } : null;
 
-  if (!figure || !transitions.length) {
-    return <div style={styles.stateBox}>No admin alluvial chart data available.</div>;
-  }
+  const filterSlot = transitions.length > 0 && (
+    <>
+      <label style={lbl}>
+        Transition
+        <select
+          value={selectedTransition}
+          onChange={e => setSelectedTransition(e.target.value)}
+          style={sel}
+        >
+          {transitions.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+        </select>
+      </label>
 
-  return (
-    <div style={styles.wrapper}>
-      <div style={styles.header}>
-        <div>
-          <h2 style={styles.title}>Alluvial Chart</h2>
-          <p style={styles.subtitle}>
-            Compare response flow across transitions.
-          </p>
-        </div>
+      <label style={lbl}>
+        Condition
+        <select
+          value={selectedCondition}
+          onChange={e => setSelectedCondition(Number(e.target.value))}
+          style={sel}
+        >
+          {conditions.map(c => (
+            <option key={c.value} value={c.value}>{c.label}</option>
+          ))}
+        </select>
+      </label>
 
-        <div style={styles.toolbar}>
-          <label htmlFor="transition-select" style={styles.label}>
-            Transition
-          </label>
+      {currentFigures.length > 0 && (
+        <label style={lbl}>
+          Question
           <select
-            id="transition-select"
-            value={selectedTransition}
-            onChange={(e) => setSelectedTransition(e.target.value)}
-            style={styles.select}
+            value={selectedQuestion ?? ""}
+            onChange={e => setSelectedQuestion(Number(e.target.value))}
+            style={{ ...sel, minWidth: 280 }}
           >
-            {transitions.map((transition) => (
-              <option key={transition.key} value={transition.key}>
-                {transition.label}
-              </option>
+            {currentFigures.map(f => (
+              <option key={f.q_num} value={f.q_num}>{f.title}</option>
             ))}
           </select>
-        </div>
-      </div>
+        </label>
+      )}
+    </>
+  );
 
-      <div style={styles.metaRow}>
-        <span style={styles.metaText}>
-          Showing {currentFigures.length} chart{currentFigures.length === 1 ? "" : "s"}
-        </span>
-      </div>
+  const isEmpty = !loading && !error && (!figure || !transitions.length);
 
-      <div style={styles.grid}>
-        {currentFigures.map((item) => {
-          const chartLayout = {
-            ...item.figure.layout,
-            autosize: true,
-            width: undefined,
-            height: item.figure?.layout?.height ?? 650,
-            paper_bgcolor: "rgba(0,0,0,0)",
-            plot_bgcolor: "rgba(0,0,0,0)",
-            font: {
-              ...(item.figure?.layout?.font || {}),
-              color: "#c8d6f0",
-            },
-            title: {
-              ...(item.figure?.layout?.title || {}),
-              font: {
-                ...((item.figure?.layout?.title && item.figure.layout.title.font) || {}),
-                color: "#e9eefc",
-              },
-            },
-          };
-
-          return (
-            <div key={`${selectedTransition}-${item.q_num}`} style={styles.card}>
-              <div style={styles.cardHeader}>
-                <h3 style={styles.cardTitle}>{item.title || `Q${item.q_num}`}</h3>
-                {item.construct ? (
-                  <p style={styles.cardSubtitle}>{item.construct}</p>
-                ) : null}
+  return (
+    <div>
+      <AdminChartWrapper
+        loading={loading}
+        error={error || undefined}
+        onRetry={() => { setError(""); setFigure(null); setLoading(true); }}
+        empty={isEmpty}
+        title="Participant Flow Between Groups"
+        subtitle="How participants moved between Likert score groups across the study weeks"
+        filterSlot={filterSlot}
+        height={680}
+      >
+        {!loading && !error && !isEmpty && option && (
+          <>
+            {/* Per-question stats row */}
+            {currentItem?.stats && (
+              <div style={statsRow}>
+                {currentItem.construct && (
+                  <span style={constructTag}>{currentItem.construct}</span>
+                )}
+                <span style={statImproved}>
+                  ▲ Improved: {currentItem.stats.improved} ({currentItem.stats.improved_pct}%)
+                </span>
+                <span style={statSame}>
+                  ▶ Same: {currentItem.stats.same} ({currentItem.stats.same_pct}%)
+                </span>
+                <span style={statDeclined}>
+                  ▼ Declined: {currentItem.stats.declined} ({currentItem.stats.declined_pct}%)
+                </span>
+                <span style={statTotal}>N={currentItem.stats.total}</span>
               </div>
+            )}
 
-              <Plot
-                data={item.figure?.data || []}
-                layout={chartLayout}
-                config={{
-                  responsive: true,
-                  displayModeBar: true,
-                  displaylogo: false,
-                  modeBarButtonsToRemove: ["lasso2d", "select2d"],
-                }}
-                style={{ width: "100%", minHeight: "650px" }}
-                useResizeHandler
+            <AppErrorBoundary key={`${selectedTransition}-${selectedCondition}-${currentItem?.q_num}`} context="chart">
+              <ReactECharts
+                option={option}
+                opts={{ renderer: "svg" }}
+                style={{ height: 650, width: "100%" }}
+                notMerge
               />
-            </div>
-          );
-        })}
-      </div>
+            </AppErrorBoundary>
+          </>
+        )}
+      </AdminChartWrapper>
     </div>
   );
 }
 
-const styles = {
-  wrapper: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 20,
-    width: "100%",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    gap: 16,
-    flexWrap: "wrap",
-    padding: "18px 20px",
-    borderRadius: 18,
-    border: "1px solid var(--card-border)",
-    background: "rgba(255,255,255,0.02)",
-  },
-  title: {
-    margin: 0,
-    color: "#e9eefc",
-    fontSize: 24,
-    fontWeight: 700,
-  },
-  subtitle: {
-    margin: "6px 0 0 0",
-    color: "#c8d6f0",
-    fontSize: 14,
-    opacity: 0.85,
-  },
-  toolbar: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-  label: {
-    color: "#c8d6f0",
-    fontSize: 14,
-    fontWeight: 600,
-  },
-  select: {
-    minWidth: 260,
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid var(--ghost-border)",
-    background: "var(--ghost-bg)",
-    color: "var(--ghost-color)",
-    fontSize: 14,
-    fontWeight: 600,
-    outline: "none",
-  },
-  metaRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  metaText: {
-    color: "#c8d6f0",
-    fontSize: 13,
-    opacity: 0.8,
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "1fr",
-    gap: 20,
-  },
-  card: {
-    padding: 18,
-    borderRadius: 18,
-    border: "1px solid var(--card-border)",
-    background: "rgba(255,255,255,0.02)",
-    overflowX: "auto",
-    boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
-  },
-  cardHeader: {
-    marginBottom: 12,
-  },
-  cardTitle: {
-    margin: 0,
-    color: "#e9eefc",
-    fontSize: 18,
-    fontWeight: 700,
-  },
-  cardSubtitle: {
-    margin: "6px 0 0 0",
-    color: "#c8d6f0",
-    fontSize: 13,
-    opacity: 0.8,
-  },
-  stateBox: {
-    padding: 20,
-    borderRadius: 16,
-    border: "1px solid var(--card-border)",
-    background: "rgba(255,255,255,0.02)",
-    color: "#c8d6f0",
-    fontSize: 14,
-  },
-  errorBox: {
-    padding: 20,
-    borderRadius: 16,
-    border: "1px solid rgba(255,120,120,0.35)",
-    background: "rgba(255,120,120,0.08)",
-    color: "#ff9b9b",
-    fontSize: 14,
-    fontWeight: 600,
-  },
+export default function AdminAlluvial(props) {
+  return (
+    <AppErrorBoundary context="chart">
+      <AdminAlluvialInner {...props} />
+    </AppErrorBoundary>
+  );
+}
+
+const lbl = {
+  display: "flex", flexDirection: "column", gap: 6,
+  fontSize: 13, fontWeight: 600, color: "var(--text-dim)",
 };
+const sel = {
+  minWidth: 180, padding: "10px 12px", borderRadius: 12,
+  border: "1px solid var(--ghost-border)", background: "var(--ghost-bg)",
+  color: "var(--ghost-color)", fontSize: 14, fontWeight: 600, outline: "none",
+};
+const statsRow = {
+  display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+  marginBottom: 12, padding: "10px 14px",
+  borderRadius: 10, background: "rgba(255,255,255,0.02)",
+  border: "1px solid var(--card-border)",
+};
+const constructTag = {
+  color: "var(--text-dim)", fontSize: 12, fontWeight: 600,
+  opacity: 0.75, marginRight: 4,
+};
+const statImproved = { color: "rgba(26,150,65,0.9)",  fontSize: 13, fontWeight: 600 };
+const statSame     = { color: "rgba(253,174,97,0.9)",  fontSize: 13, fontWeight: 600 };
+const statDeclined = { color: "rgba(215,48,39,0.9)",   fontSize: 13, fontWeight: 600 };
+const statTotal    = { color: "var(--text-dim)", fontSize: 12, opacity: 0.6, marginLeft: "auto" };

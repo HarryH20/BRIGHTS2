@@ -92,6 +92,84 @@ def get_goals():
 _ALLOWED_GRAPHS = {"roseplot", "radarplot"}
 
 
+@viz_bp.route("/goal_trajectory_available")
+@login_required
+def goal_trajectory_available():
+    """
+    GET /api/visualizations/goal_trajectory_available?goal_index=0
+    Returns which question numbers have at least one non-null response for
+    the current user's specified goal. Used by GoalTrajectorySparklines to
+    filter its dropdowns to questions that actually have data.
+    """
+    goal_index = request.args.get("goal_index", 0, type=int)
+    user_id = session["user_id"]
+
+    try:
+        module = importlib.import_module("analysis.goal_trajectory_sparklines")
+        data = module.fetch_data(user_id, db.engine, goal_index)
+        if not data:
+            return jsonify({"available_questions": []})
+        available = [
+            q for q in range(1, 44)
+            if any(v is not None for v in data["p_q_traj"][q])
+        ]
+        return jsonify({"available_questions": available})
+    except Exception:
+        logger.error("Failed to fetch available trajectory questions", exc_info=True)
+        return jsonify({"available_questions": []}), 500
+
+
+@viz_bp.route("/goal_trajectory_sparklines")
+@login_required
+def goal_trajectory_sparklines():
+    """
+    GET /api/visualizations/goal_trajectory_sparklines
+        ?goal_index=0&use_constructs=false&item_index=0
+
+    Returns structured trajectory data for ECharts rendering:
+      { goal_text, label, min_t, traj, q25, q50, q75, t_labels }
+    or { empty: true } when no survey data exists yet.
+    """
+    goal_index    = request.args.get("goal_index", 0, type=int)
+    use_constructs = request.args.get("use_constructs", "false").lower() == "true"
+    item_index    = request.args.get("item_index", 0, type=int)
+    user_id = session["user_id"]
+
+    try:
+        module = importlib.import_module("analysis.goal_trajectory_sparklines")
+        data = module.fetch_data(user_id, db.engine, goal_index)
+        if not data:
+            return jsonify({"empty": True})
+
+        if use_constructs:
+            constructs = [(lbl, min_t) for lbl, _, min_t in module.CONSTRUCTS]
+            idx        = min(item_index, len(constructs) - 1)
+            lbl, min_t = constructs[idx]
+            traj       = data["p_c_traj"][lbl]
+            band       = data["c_bands"][lbl]
+            label      = lbl
+        else:
+            q     = min(item_index + 1, 43)
+            min_t = module.Q_MIN_T[q]
+            traj  = data["p_q_traj"][q]
+            band  = data["q_bands"][q]
+            label = module.Q_LABELS[q]
+
+        return jsonify({
+            "goal_text": data["goal_text"],
+            "label":     label,
+            "min_t":     min_t,
+            "traj":      traj,
+            "q25":       band["q25"],
+            "q50":       band["q50"],
+            "q75":       band["q75"],
+            "t_labels":  module.T_LABELS,
+        })
+    except Exception:
+        logger.error("Failed to generate goal trajectory sparklines", exc_info=True)
+        return jsonify({"error": "Failed to generate visualization"}), 500
+
+
 @viz_bp.route("/<graph_name>")
 @login_required
 def serve_graph(graph_name):

@@ -1,8 +1,7 @@
-# analysis/adminalluvialcharts.py
+# analysis/adminalluvial.py
 
 import sqlalchemy
 import plotly.graph_objects as go
-
 
 # ---------------------------------------------------------------------------
 # Question metadata (Q1–Q22 appear at T1+; Q23–Q43 appear at T2+)
@@ -54,7 +53,6 @@ QUESTION_LABELS = {
     43: "Transcendent Accountability",
 }
 
-# Short item label for display in chart
 QUESTION_SHORT = {
     1:  "Q1: Centrality – Current",
     2:  "Q2: Centrality – Ideal",
@@ -101,8 +99,13 @@ QUESTION_SHORT = {
     43: "Q43: Transcendent Accountability",
 }
 
-# Q1–Q22 available from T1; Q23–Q43 only from T2 onward
-Q1_TO_22 = list(range(1, 23))
+CONDITION_MAP = {
+    1: "Purpose Outcome Obstacle Plan",
+    2: "Goal Outcome Obstacle Plan",
+    3: "Control Condition",
+}
+
+Q1_TO_22  = list(range(1, 23))
 Q23_TO_43 = list(range(23, 44))
 
 LIKERT_LABELS = {
@@ -125,44 +128,38 @@ SCORE_COLORS = {
     7: "#2166AC",
 }
 
-# Week transitions: (from_week, to_week)
-# Week 1 = T1, Week 2 = T2, ... Week 6 = T6
 TRANSITIONS = [
     (1, 2),
     (2, 3),
     (3, 4),
     (4, 5),
     (5, 6),
-    (1, 6),  # overall
+    (1, 6),
 ]
-
-
-def _t(week):
-    """Week number → timepoint number (same)."""
-    return week
 
 
 def fetch_data(engine):
     """
-    Fetches Likert columns GT{t}Q{q} for all valid (t, q) combinations.
+    Fetches Likert columns GT{t}Q{q} and Condition for all valid (t, q)
+    combinations.
     Q1–Q22: T1–T6. Q23–Q43: T2–T6.
 
-    Returns a list of dicts keyed by 'GT{t}Q{q}'.
+    Returns a list of dicts keyed by 'GT{t}Q{q}' plus 'Condition'.
     """
-    cols = []
+    cols = ['"Condition"']
     for t in range(1, 7):
         for q in Q1_TO_22:
-            cols.append(f"GT{t}Q{q}")
+            cols.append(f'"GT{t}Q{q}"')
     for t in range(2, 7):
         for q in Q23_TO_43:
-            cols.append(f"GT{t}Q{q}")
+            cols.append(f'"GT{t}Q{q}"')
 
-    col_str = ", ".join(f'"{c}"' for c in cols)
-    query = sqlalchemy.text(f'SELECT {col_str} FROM "GoalIntervention"')
+    col_str = ", ".join(cols)
+    query   = sqlalchemy.text(f'SELECT {col_str} FROM "GoalIntervention"')
 
     with engine.connect() as conn:
         result = conn.execute(query)
-        rows = result.fetchall()
+        rows   = result.fetchall()
         if not rows:
             return []
         keys = list(result.keys())
@@ -179,13 +176,25 @@ def _safe_int(val):
     return None
 
 
-def _build_sankey(rows, t_start, t_end, q_num):
+def _safe_condition(val):
+    try:
+        return int(float(val))
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_sankey(rows, t_start, t_end, q_num, condition=0):
     """
-    Build a single Sankey figure dict for one question and one transition.
-    Returns fig.to_dict() or None if no valid data.
+    Build a single Sankey figure dict for one question, one transition,
+    and optionally one condition (0 = all conditions).
+
+    Returns (fig.to_dict(), stats_dict) or None if no valid data.
     """
+    if condition != 0:
+        rows = [r for r in rows if _safe_condition(r.get("Condition")) == condition]
+
     col_start = f"GT{t_start}Q{q_num}"
-    col_end = f"GT{t_end}Q{q_num}"
+    col_end   = f"GT{t_end}Q{q_num}"
 
     flow_counts = {}
     for row in rows:
@@ -197,11 +206,32 @@ def _build_sankey(rows, t_start, t_end, q_num):
     if not flow_counts:
         return None
 
-    w_start = f"Week {t_start}"
-    w_end = f"Week {t_end}"
+    total    = sum(flow_counts.values())
+    improved = sum(cnt for (s, e), cnt in flow_counts.items() if e > s)
+    same     = sum(cnt for (s, e), cnt in flow_counts.items() if e == s)
+    declined = sum(cnt for (s, e), cnt in flow_counts.items() if e < s)
 
-    # Nodes: scores 7→1 for start side, then 7→1 for end side
-    labels = []
+    top_flows = sorted(flow_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+    top_flows_out = [
+        {"from": LIKERT_LABELS[s], "to": LIKERT_LABELS[e], "count": cnt}
+        for (s, e), cnt in top_flows
+    ]
+
+    stats = {
+        "total":        total,
+        "improved":     improved,
+        "same":         same,
+        "declined":     declined,
+        "improved_pct": round(improved / total * 100, 1) if total else 0,
+        "same_pct":     round(same     / total * 100, 1) if total else 0,
+        "declined_pct": round(declined / total * 100, 1) if total else 0,
+        "top_flows":    top_flows_out,
+    }
+
+    w_start = f"Week {t_start}"
+    w_end   = f"Week {t_end}"
+
+    labels     = []
     label_dict = {}
     for score in reversed(range(1, 8)):
         labels.append(f"{w_start}: {LIKERT_LABELS[score]}")
@@ -213,7 +243,7 @@ def _build_sankey(rows, t_start, t_end, q_num):
     source, target, value, link_colors = [], [], [], []
     for (s_score, e_score), count in sorted(flow_counts.items()):
         source.append(label_dict[("start", s_score)])
-        target.append(label_dict[("end", e_score)])
+        target.append(label_dict[("end",   e_score)])
         value.append(count)
         if e_score > s_score:
             link_colors.append("rgba(26, 150, 65, 0.4)")
@@ -222,10 +252,13 @@ def _build_sankey(rows, t_start, t_end, q_num):
         else:
             link_colors.append("rgba(253, 174, 97, 0.4)")
 
-    node_colors = (
-        [SCORE_COLORS[s] for s in reversed(range(1, 8))] * 2
-    )
+    node_colors = [SCORE_COLORS[s] for s in reversed(range(1, 8))] * 2
 
+    condition_label = (
+        CONDITION_MAP.get(condition, "All Conditions")
+        if condition != 0
+        else "All Conditions"
+    )
     q_short = QUESTION_SHORT.get(q_num, f"Q{q_num}")
 
     fig = go.Figure(data=[go.Sankey(
@@ -248,8 +281,8 @@ def _build_sankey(rows, t_start, t_end, q_num):
     fig.update_layout(
         title=dict(
             text=(
-                f"<b>{q_short}</b><br>"
-                f"<sub>{w_start} \u2192 {w_end} &nbsp;|&nbsp; "
+                f"<b>{q_short}</b>  |  {condition_label}<br>"
+                f"<sub>{w_start} → {w_end} &nbsp;|&nbsp; "
                 f"<span style='color:rgba(26,150,65,0.9)'>&#9650; Improved</span> &nbsp; "
                 f"<span style='color:rgba(253,174,97,0.9)'>&#9654; No change</span> &nbsp; "
                 f"<span style='color:rgba(215,48,39,0.9)'>&#9660; Declined</span></sub>"
@@ -263,7 +296,7 @@ def _build_sankey(rows, t_start, t_end, q_num):
         margin=dict(t=80, l=20, r=20, b=20),
     )
 
-    return fig.to_dict()
+    return fig.to_dict(), stats
 
 
 def build_figure(engine):
@@ -271,48 +304,54 @@ def build_figure(engine):
     Main entry point called by the backend.
 
     Returns a dict with:
-      - "transitions": list of {label, key} for the dropdown
-      - "figures": dict keyed by transition key → list of {q_num, title, figure}
-
-    The frontend uses the dropdown to select a transition key and renders
-    the corresponding list of figures (one per question).
+      - "transitions":  list of {label, key}
+      - "conditions":   list of {label, value} for the condition dropdown
+      - "figures":      dict keyed by "{transition_key}_C{condition}" ->
+                        list of {q_num, title, construct, figure, stats}
     """
     rows = fetch_data(engine)
     if not rows:
-        return {"transitions": [], "figures": {}}
+        return {"transitions": [], "conditions": [], "figures": {}}
 
     transitions_meta = []
-    figures = {}
-
     for t_start, t_end in TRANSITIONS:
-        if t_start == 1 and t_end == 6:
-            label = "Week 1 → Week 6 (Overall)"
-        else:
-            label = f"Week {t_start} → Week {t_end}"
-        key = f"W{t_start}_W{t_end}"
+        label = (
+            "Week 1 → Week 6 (Overall)"
+            if t_start == 1 and t_end == 6
+            else f"Week {t_start} → Week {t_end}"
+        )
+        transitions_meta.append({"label": label, "key": f"W{t_start}_W{t_end}"})
 
-        transitions_meta.append({"label": label, "key": key})
+    conditions_meta = [{"label": "All Conditions", "value": 0}] + [
+        {"label": lbl, "value": val}
+        for val, lbl in CONDITION_MAP.items()
+    ]
 
-        # Determine which questions are valid for this transition
-        if t_start == 1:
-            valid_qs = Q1_TO_22  # T1 only has Q1–Q22
-        else:
-            valid_qs = Q1_TO_22 + Q23_TO_43  # T2+ has all 43
+    figures = {}
+    for t_start, t_end in TRANSITIONS:
+        t_key    = f"W{t_start}_W{t_end}"
+        valid_qs = Q1_TO_22 if t_start == 1 else Q1_TO_22 + Q23_TO_43
 
-        q_figures = []
-        for q_num in valid_qs:
-            fig_dict = _build_sankey(rows, t_start, t_end, q_num)
-            if fig_dict is not None:
-                q_figures.append({
-                    "q_num": q_num,
-                    "title": QUESTION_SHORT.get(q_num, f"Q{q_num}"),
-                    "construct": QUESTION_LABELS.get(q_num, ""),
-                    "figure": fig_dict,
-                })
+        for condition in [0, 1, 2, 3]:
+            fig_key   = f"{t_key}_C{condition}"
+            q_figures = []
 
-        figures[key] = q_figures
+            for q_num in valid_qs:
+                result = _build_sankey(rows, t_start, t_end, q_num, condition)
+                if result is not None:
+                    fig_dict, stats = result
+                    q_figures.append({
+                        "q_num":     q_num,
+                        "title":     QUESTION_SHORT.get(q_num, f"Q{q_num}"),
+                        "construct": QUESTION_LABELS.get(q_num, ""),
+                        "figure":    fig_dict,
+                        "stats":     stats,
+                    })
+
+            figures[fig_key] = q_figures
 
     return {
         "transitions": transitions_meta,
-        "figures": figures,
+        "conditions":  conditions_meta,
+        "figures":     figures,
     }

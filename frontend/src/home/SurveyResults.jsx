@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import HomeLayout from "./HomeLayout.jsx";
+import ParticipantShell from "./ParticipantShell.jsx";
+import { FileText } from "lucide-react";
 
 /* ============================
    Constants
@@ -72,8 +73,13 @@ function SurveyResultsContent({
       {loading ? (
         <p style={styles.muted}>Loading…</p>
       ) : filteredGoals.length === 0 ? (
-        <p style={styles.muted}>No data available for this survey.</p>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "32px 16px", gap: 10, textAlign: "center" }}>
+          <FileText size={36} style={{ opacity: 0.3 }} />
+          <div style={{ fontWeight: 700, fontSize: 14 }}>No survey data yet</div>
+          <p style={{ ...styles.muted, maxWidth: 260, margin: 0 }}>This survey hasn&apos;t been completed yet.</p>
+        </div>
       ) : (
+        <div style={{ overflowX: "auto" }}>
         <table style={styles.table}>
           <thead>
             <tr>
@@ -120,15 +126,13 @@ function SurveyResultsContent({
             })}
           </tbody>
         </table>
+        </div>
       )}
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
         <Link to={`/surveys/${surveyId}/analysis`} style={styles.pillLink}>
           Go to Analysis →
-        </Link>
-        <Link to="/dashboard" style={styles.pillLink}>
-          Back to Dashboard
         </Link>
       </div>
     </div>
@@ -201,13 +205,13 @@ export default function SurveyResults({
 
   // Standalone page
   return (
-    <HomeLayout
+    <ParticipantShell
       user={user}
       onLogout={onLogout}
       title={`${tpLabel} Survey — Results`}
     >
       {content}
-    </HomeLayout>
+    </ParticipantShell>
   );
 }
 
