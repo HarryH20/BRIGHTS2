@@ -89,14 +89,14 @@ function Sparkline({ scores, color }) {
   );
 }
 
-export default function GoalPage({ user, onLogout }) {
+export default function GoalPage({ user, onLogout, surveyCompletion: surveyCompletionProp }) {
   const { goalId } = useParams();
   const [goal,             setGoal]             = useState(null);
   const [goalIndex,        setGoalIndex]        = useState(null);
   const [loading,          setLoading]          = useState(true);
   const [error,            setError]            = useState(null);
   const [weeks,            setWeeks]            = useState("2-6");
-  const [surveyCompletion, setSurveyCompletion] = useState(null);
+  const [surveyCompletion, setSurveyCompletion] = useState(surveyCompletionProp ?? null);
 
   const shownTPs = useMemo(() => tpsForWeeks(weeks), [weeks]);
 
@@ -112,11 +112,13 @@ export default function GoalPage({ user, onLogout }) {
       .catch(() => setError("Failed to load goal data."))
       .finally(() => setLoading(false));
 
-    fetch("/api/survey/status", { credentials: "include" })
-      .then(r => r.json())
-      .then(d => setSurveyCompletion(d.timepoints ?? null))
-      .catch(() => {});
-  }, [goalId]);
+    if (!surveyCompletionProp) {
+      fetch("/api/survey/status", { credentials: "include" })
+        .then(r => r.json())
+        .then(d => setSurveyCompletion(d.timepoints ?? null))
+        .catch(() => {});
+    }
+  }, [goalId]); // eslint-disable-line
 
   // --- derived data for summary cards and best week ---
   const summaryCards = useMemo(() => {

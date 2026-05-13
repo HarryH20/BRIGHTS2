@@ -1,12 +1,13 @@
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request, session
+
 from models import (
     db, User, SurveyQuestion, SurveySubmission, SurveyResponse,
     TemplateQuestion, Enrollment, DataQualityFlag, QualityCheckRun,
-    FlagThresholdConfig,
+    FlagThresholdConfig, ConsentForm, ConsentFormRevision, ParticipantConsent,
 )
 from routes.auth import login_required, admin_required
 from cache import invalidate_user_chart_cache
@@ -132,16 +133,19 @@ def get_next_survey():
 
     # Step 3 — Serve from template_questions
     if use_template_questions:
-        questions = (
-            TemplateQuestion.query
-            .filter(
-                TemplateQuestion.template_id == active_round.template_id,
-                TemplateQuestion.status == "active",
-                TemplateQuestion.timepoints.contains([next_tp]),
+        # Filter timepoints in Python — avoids dialect-specific ARRAY operators
+        questions = [
+            q for q in (
+                TemplateQuestion.query
+                .filter(
+                    TemplateQuestion.template_id == active_round.template_id,
+                    TemplateQuestion.status == "active",
+                )
+                .order_by(TemplateQuestion.display_order)
+                .all()
             )
-            .order_by(TemplateQuestion.display_order)
-            .all()
-        )
+            if next_tp in (q.timepoints or [])
+        ]
 
         goals = _get_goal_texts(user_id, next_tp)
 
@@ -666,8 +670,110 @@ def _q_dict(q):
 
 
 def _utcnow():
-    from datetime import datetime, timezone
     return datetime.now(timezone.utc)
+
+
+# ── Participant consent routes ─────────────────────────────────────────────────
+
+@survey_bp.route("/consent/pending", methods=["GET"])
+@login_required
+def get_pending_consent():
+    """
+    Return the active consent form if the logged-in user hasn't accepted it yet.
+    Returns { "consent": null } if no action is needed.
+    """
+    user_id = session["user_id"]
+    user = db.session.get(User, user_id)
+
+    if not user or not user.active_round_id:
+        return jsonify({"consent": None})
+
+    active_round = user.active_round
+    if not active_round or active_round.status not in ("enrolling", "active"):
+        return jsonify({"consent": None})
+
+    consent = ConsentForm.query.filter_by(
+        study_id=active_round.study_id, is_active=True
+    ).first()
+    if not consent:
+        return jsonify({"consent": None})
+
+    already = ParticipantConsent.query.filter_by(
+        user_id=user_id, consent_form_id=consent.id
+    ).first()
+    if already:
+        return jsonify({"consent": None})
+
+    revision = (
+        ConsentFormRevision.query
+        .filter_by(consent_form_id=consent.id)
+        .order_by(ConsentFormRevision.created_at.desc())
+        .first()
+    )
+    if not revision:
+        return jsonify({"consent": None})
+
+    return jsonify({
+        "consent": {
+            "form_id": consent.id,
+            "revision_id": revision.id,
+            "title": consent.title,
+            "version": revision.version,
+            "body_markdown": revision.body_markdown,
+        }
+    })
+
+
+@survey_bp.route("/consent/accept", methods=["POST"])
+@login_required
+def accept_consent():
+    """
+    POST /api/survey/consent/accept — Record participant's consent.
+    Body: { form_id, revision_id }
+    """
+    user_id = session["user_id"]
+    user = db.session.get(User, user_id)
+    data = request.get_json() or {}
+
+    form_id = data.get("form_id")
+    revision_id = data.get("revision_id")
+
+    if not form_id:
+        return jsonify({"error": "form_id required"}), 400
+
+    consent_form = db.session.get(ConsentForm, form_id)
+    if not consent_form or not consent_form.is_active:
+        return jsonify({"error": "Consent form not found or inactive"}), 404
+
+    existing = ParticipantConsent.query.filter_by(
+        user_id=user_id, consent_form_id=form_id
+    ).first()
+    if existing:
+        return jsonify({"status": "already_accepted"}), 200
+
+    now = datetime.now(timezone.utc)
+    pc = ParticipantConsent(
+        user_id=user_id,
+        consent_form_id=form_id,
+        round_id=user.active_round_id if user else None,
+        consented_at=now,
+        ip_address=(request.remote_addr or "")[:50],
+        user_agent=request.headers.get("User-Agent", "")[:200],
+        consent_form_revision_id=revision_id,
+        signature_method="checkbox",
+        signature_meaning=data.get("signature_meaning", "I consent to participate in this research study"),
+    )
+
+    try:
+        db.session.add(pc)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        logger.error("Failed to record consent: user=%s form=%s", user_id, form_id, exc_info=True)
+        return jsonify({"error": "Failed to record consent"}), 500
+
+    logger.info("Consent accepted: user=%s form=%s revision=%s", user_id, form_id, revision_id)
+    return jsonify({"status": "accepted"}), 201
 
 
 def _get_goal_texts(user_id, timepoint):

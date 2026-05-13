@@ -33,6 +33,7 @@ import AdminQualityPage from "./admin/pages/AdminQualityPage.jsx";
 import AdminAccessRestrictedPage from "./admin/pages/AdminAccessRestrictedPage.jsx";
 import ResearcherJoinPage from "./auth/ResearcherJoinPage.jsx";
 import JoinStudyPage from "./auth/JoinStudyPage.jsx";
+import ConsentModal from "./home/ConsentModal.jsx";
 
 function RequireAuth({ user, checking, children }) {
   if (checking) return <div style={{ padding: 20 }}>Loading...</div>;
@@ -66,6 +67,8 @@ export default function App() {
   const [checking, setChecking] = useState(true);
   const [chartCache, setChartCache] = useState(EMPTY_CHART_CACHE);
   const [surveyInfo, setSurveyInfo] = useState(null);
+  const [surveyCompletion, setSurveyCompletion] = useState(null);
+  const [pendingConsent, setPendingConsent] = useState(null);
   const navigate = useNavigate();
 
   function clearChartCache() {
@@ -84,12 +87,20 @@ export default function App() {
     })();
   }, []);
 
-  // Fetch survey status once after auth check — ParticipantShell reads from context
+  // Fetch survey state + pending consent once after auth check
   useEffect(() => {
     if (!user || user.role === "admin" || user.is_researcher) return;
     fetch("/api/survey/next", { credentials: "include" })
       .then(r => r.json())
       .then(d => setSurveyInfo(d))
+      .catch(() => {});
+    fetch("/api/survey/status", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setSurveyCompletion(d.timepoints ?? null))
+      .catch(() => {});
+    fetch("/api/survey/consent/pending", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => { if (d.consent) setPendingConsent(d.consent); })
       .catch(() => {});
   }, [user?.id]); // eslint-disable-line
 
@@ -109,6 +120,13 @@ export default function App() {
 
   return (
     <AppErrorBoundary context="page">
+      {pendingConsent && (
+        <ConsentModal
+          consent={pendingConsent}
+          onAccepted={() => setPendingConsent(null)}
+          onDecline={handleLogout}
+        />
+      )}
       <SurveyContext.Provider value={surveyInfo}>
       <Routes>
         <Route
@@ -161,7 +179,7 @@ export default function App() {
           path="/dashboard/*"
           element={
             <RequireAuth user={user} checking={checking}>
-              <Dashboard user={user} onLogout={handleLogout} chartCache={chartCache} setChartCache={setChartCache} />
+              <Dashboard user={user} onLogout={handleLogout} chartCache={chartCache} setChartCache={setChartCache} surveyCompletion={surveyCompletion} />
             </RequireAuth>
           }
         />
@@ -201,7 +219,7 @@ export default function App() {
           path="/goals/:goalId"
           element={
             <RequireAuth user={user} checking={checking}>
-              <GoalPage user={user} onLogout={handleLogout} />
+              <GoalPage user={user} onLogout={handleLogout} surveyCompletion={surveyCompletion} />
             </RequireAuth>
           }
         />

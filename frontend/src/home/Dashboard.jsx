@@ -176,7 +176,7 @@ function DashboardContent({
   );
 }
 
-export default function Dashboard({ user, onLogout, chartCache, setChartCache }) {
+export default function Dashboard({ user, onLogout, chartCache, setChartCache, surveyCompletion: surveyCompletionProp }) {
   const navigate = useNavigate();
   const [goalFilter, setGoalFilter] = useState("all");
   const [weekFilter, setWeekFilter] = useState("all");
@@ -190,14 +190,15 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
   const [ready, setReady] = useState(chartCache?.loaded ?? false);
   const [goalsLoaded, setGoalsLoaded] = useState(!!(chartCache?.loaded || chartCache?.goalsReady));
   const [loadingStatus, setLoadingStatus] = useState("Loading your goals...");
-  const [surveyCompletion, setSurveyCompletion] = useState(null);
+  const [surveyCompletion, setSurveyCompletion] = useState(surveyCompletionProp ?? null);
 
   useEffect(() => {
+    if (surveyCompletionProp) return;
     fetch("/api/survey/status", { credentials: "include" })
       .then((r) => r.json())
       .then((d) => setSurveyCompletion(d.timepoints ?? null))
       .catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line
 
   useEffect(() => {
     if (chartCache?.loaded) return;

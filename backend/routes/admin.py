@@ -1,12 +1,14 @@
+import csv
 import hashlib
 import importlib
+import io
 import logging
 import string
 import secrets
 
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, make_response, request, session
 from sqlalchemy import func
 
 import json
@@ -19,7 +21,7 @@ from models import (
     QualityCheckRun,
     ResearcherInvitation, ResearcherRole,
     SessionLog, Study, StudyCondition, StudyRound, StudyTemplate,
-    SurveySubmission, TemplateQuestion, User, db,
+    SurveyQuestion, SurveyResponse, SurveySubmission, TemplateQuestion, User, db,
     ConsentForm, ConsentFormRevision, ParticipantConsent,
 )
 from routes.auth import admin_required, admin_or_researcher_required
@@ -1817,12 +1819,15 @@ def send_notifications(round_id):
             sent += len(notif_objects)
 
             if _sse_ok:
-                for n in notif_objects:
-                    if n.user_id in _sse_subscribers:
-                        try:
-                            _push_notification(n.user_id, _notif_dict(n))
-                        except Exception:
-                            pass
+                try:
+                    for n in notif_objects:
+                        if n.user_id in _sse_subscribers:
+                            try:
+                                _push_notification(n.user_id, _notif_dict(n))
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
 
             db.session.expire_all()
 
@@ -2143,3 +2148,238 @@ def create_flag_threshold(round_id):
 def recheck_quality_flags(round_id):
     """POST /api/admin/rounds/<round_id>/recheck — placeholder."""
     return jsonify({"error": "Not implemented"}), 501
+
+
+# =============================================================================
+# Data export routes
+# =============================================================================
+
+def _csv_response(rows, headers, filename):
+    """Build a Flask CSV download response from a list of dicts."""
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=headers, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    resp = make_response(buf.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = f"attachment; filename={filename}"
+    return resp
+
+
+@admin_bp.route("/export/survey-responses", methods=["GET"])
+@admin_required
+def export_survey_responses():
+    """GET /api/admin/export/survey-responses — all survey responses as CSV."""
+    try:
+        rows = (
+            db.session.query(
+                User.participant_id,
+                SurveyResponse.timepoint,
+                SurveyResponse.goal_index,
+                SurveyQuestion.question_number,
+                SurveyQuestion.question_text,
+                SurveyQuestion.scale_type,
+                SurveyResponse.response_value,
+                SurveyResponse.submitted_at,
+            )
+            .join(SurveyQuestion, SurveyResponse.question_id == SurveyQuestion.id)
+            .join(User, SurveyResponse.user_id == User.id)
+            .filter(User.role == "user")
+            .order_by(User.participant_id, SurveyResponse.timepoint, SurveyResponse.goal_index, SurveyQuestion.question_number)
+            .all()
+        )
+        data = [
+            {
+                "participant_id": r.participant_id or "",
+                "timepoint": r.timepoint,
+                "goal_index": r.goal_index,
+                "question_number": r.question_number,
+                "question_text": r.question_text,
+                "scale_type": r.scale_type,
+                "response_value": r.response_value,
+                "submitted_at": r.submitted_at.isoformat() if r.submitted_at else "",
+            }
+            for r in rows
+        ]
+        headers = ["participant_id", "timepoint", "goal_index", "question_number", "question_text", "scale_type", "response_value", "submitted_at"]
+        return _csv_response(data, headers, "survey_responses.csv")
+    except Exception:
+        logger.error("Failed to export survey responses", exc_info=True)
+        return jsonify({"error": "Export failed"}), 500
+
+
+@admin_bp.route("/export/goal-progress", methods=["GET"])
+@admin_required
+def export_goal_progress():
+    """GET /api/admin/export/goal-progress — Q39/Q40/Q41 per participant per goal per timepoint."""
+    try:
+        # Fetch goal texts (T1, scale_type=goal_text)
+        goal_texts = (
+            db.session.query(User.participant_id, SurveyResponse.goal_index, SurveyResponse.response_value)
+            .join(User, SurveyResponse.user_id == User.id)
+            .join(SurveyQuestion, SurveyResponse.question_id == SurveyQuestion.id)
+            .filter(User.role == "user", SurveyQuestion.scale_type == "goal_text")
+            .all()
+        )
+        gt_map = {(r.participant_id, r.goal_index): r.response_value for r in goal_texts}
+
+        # Fetch Q39/Q40/Q41 scores T1-T6
+        scores = (
+            db.session.query(
+                User.participant_id,
+                SurveyResponse.goal_index,
+                SurveyResponse.timepoint,
+                SurveyQuestion.question_number,
+                SurveyResponse.response_value,
+            )
+            .join(User, SurveyResponse.user_id == User.id)
+            .join(SurveyQuestion, SurveyResponse.question_id == SurveyQuestion.id)
+            .filter(User.role == "user", SurveyQuestion.question_number.in_([39, 40, 41]))
+            .all()
+        )
+
+        # Index by (participant_id, goal_index, timepoint, question_number)
+        score_map = {}
+        for r in scores:
+            score_map[(r.participant_id, r.goal_index, r.timepoint, r.question_number)] = r.response_value
+
+        # Build flat rows
+        seen = {(r.participant_id, r.goal_index) for r in scores}
+        data = []
+        for pid, gi in sorted(seen):
+            row = {
+                "participant_id": pid or "",
+                "goal_index": gi,
+                "goal_text": gt_map.get((pid, gi), ""),
+            }
+            for tp in range(1, 7):
+                for qn in [39, 40, 41]:
+                    row[f"T{tp}_Q{qn}"] = score_map.get((pid, gi, tp, qn), "")
+            data.append(row)
+
+        headers = ["participant_id", "goal_index", "goal_text"] + [f"T{t}_Q{q}" for t in range(1, 7) for q in [39, 40, 41]]
+        return _csv_response(data, headers, "goal_progress.csv")
+    except Exception:
+        logger.error("Failed to export goal progress", exc_info=True)
+        return jsonify({"error": "Export failed"}), 500
+
+
+@admin_bp.route("/export/demographics", methods=["GET"])
+@admin_required
+def export_demographics():
+    """GET /api/admin/export/demographics — anonymized enrollment data, no PII."""
+    try:
+        rows = (
+            db.session.query(
+                User.participant_id,
+                User.created_at.label("registered_at"),
+                Enrollment.enrolled_at,
+                Enrollment.status,
+                Enrollment.round_id,
+                Enrollment.condition_label,
+                Enrollment.condition_group,
+                Enrollment.device_type,
+                Enrollment.join_method,
+                Enrollment.consent_version,
+                Enrollment.withdrawn_at,
+            )
+            .join(Enrollment, Enrollment.user_id == User.id)
+            .filter(User.role == "user")
+            .order_by(User.participant_id)
+            .all()
+        )
+        data = [
+            {
+                "participant_id": r.participant_id or "",
+                "registered_at": r.registered_at.isoformat() if r.registered_at else "",
+                "enrolled_at": r.enrolled_at.isoformat() if r.enrolled_at else "",
+                "enrollment_status": r.status,
+                "round_id": r.round_id,
+                "condition": r.condition_label or "",
+                "condition_group": r.condition_group or "",
+                "device_type": r.device_type or "",
+                "join_method": r.join_method or "",
+                "consent_version": r.consent_version or "",
+                "withdrawn_at": r.withdrawn_at.isoformat() if r.withdrawn_at else "",
+            }
+            for r in rows
+        ]
+        headers = ["participant_id", "registered_at", "enrolled_at", "enrollment_status", "round_id", "condition", "condition_group", "device_type", "join_method", "consent_version", "withdrawn_at"]
+        return _csv_response(data, headers, "demographics.csv")
+    except Exception:
+        logger.error("Failed to export demographics", exc_info=True)
+        return jsonify({"error": "Export failed"}), 500
+
+
+@admin_bp.route("/export/audit-log", methods=["GET"])
+@admin_required
+def export_audit_log():
+    """GET /api/admin/export/audit-log — full audit event log."""
+    try:
+        rows = (
+            db.session.query(
+                AuditLog.timestamp,
+                AuditLog.event_type,
+                User.participant_id,
+                User.role,
+                AuditLog.detail,
+                AuditLog.ip_address,
+                AuditLog.request_id,
+            )
+            .outerjoin(User, AuditLog.user_id == User.id)
+            .order_by(AuditLog.timestamp.desc())
+            .all()
+        )
+        data = [
+            {
+                "timestamp": r.timestamp.isoformat() if r.timestamp else "",
+                "event_type": r.event_type,
+                "participant_id": r.participant_id or "",
+                "role": r.role or "",
+                "detail": r.detail or "",
+                "ip_address": r.ip_address or "",
+                "request_id": r.request_id or "",
+            }
+            for r in rows
+        ]
+        headers = ["timestamp", "event_type", "participant_id", "role", "detail", "ip_address", "request_id"]
+        return _csv_response(data, headers, "audit_log.csv")
+    except Exception:
+        logger.error("Failed to export audit log", exc_info=True)
+        return jsonify({"error": "Export failed"}), 500
+
+
+@admin_bp.route("/export/sessions", methods=["GET"])
+@admin_required
+def export_sessions():
+    """GET /api/admin/export/sessions — login session records."""
+    try:
+        rows = (
+            db.session.query(
+                SessionLog.login_at,
+                SessionLog.logout_at,
+                SessionLog.duration_seconds,
+                User.participant_id,
+                User.role,
+                SessionLog.ip_address,
+            )
+            .join(User, SessionLog.user_id == User.id)
+            .order_by(SessionLog.login_at.desc())
+            .all()
+        )
+        data = [
+            {
+                "login_at": r.login_at.isoformat() if r.login_at else "",
+                "logout_at": r.logout_at.isoformat() if r.logout_at else "",
+                "duration_seconds": r.duration_seconds if r.duration_seconds is not None else "",
+                "participant_id": r.participant_id or "",
+                "role": r.role,
+                "ip_address": r.ip_address or "",
+            }
+            for r in rows
+        ]
+        headers = ["login_at", "logout_at", "duration_seconds", "participant_id", "role", "ip_address"]
+        return _csv_response(data, headers, "sessions.csv")
+    except Exception:
+        logger.error("Failed to export sessions", exc_info=True)
+        return jsonify({"error": "Export failed"}), 500
