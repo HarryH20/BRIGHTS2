@@ -23,6 +23,9 @@ DEMO_ACCOUNTS = [
 ]
 
 DEMO_PASSWORD = "BrightsDemo2026!"
+ADMIN_USERNAME = "admin"
+ADMIN_EMAIL = "admin@brights.dev"
+ADMIN_PASSWORD = "BrightsAdmin2026!"
 
 with app.app_context():
     # Add column if it doesn't exist yet
@@ -44,14 +47,21 @@ with app.app_context():
     db.session.commit()
     print(f"Cleared {deleted} existing user(s).")
 
-    # Seed demo accounts
+    # Seed admin account
+    admin = User(username=ADMIN_USERNAME, email=ADMIN_EMAIL, role="admin")
+    admin.set_password(ADMIN_PASSWORD)
+    db.session.add(admin)
+
+    # Seed demo participant accounts
     for username, email, pid in DEMO_ACCOUNTS:
         u = User(username=username, email=email, participant_id=pid)
         u.set_password(DEMO_PASSWORD)
         db.session.add(u)
 
     db.session.commit()
-    print(f"Created {len(DEMO_ACCOUNTS)} demo account(s):")
+    print(f"Created admin account:")
+    print(f"  {ADMIN_USERNAME} / {ADMIN_PASSWORD}")
+    print(f"Created {len(DEMO_ACCOUNTS)} demo participant account(s):")
     for username, email, pid in DEMO_ACCOUNTS:
         print(f"  {username} / {DEMO_PASSWORD}  ->  participant_id={pid}")
 

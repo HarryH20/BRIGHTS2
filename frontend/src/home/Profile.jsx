@@ -25,6 +25,7 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
       const res = await fetch("/auth/change-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
       });
       const data = await res.json();
@@ -58,6 +59,7 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
       const res = await fetch("/auth/display-name", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ display_name: displayName.trim() }),
       });
       const data = await res.json();
@@ -159,7 +161,7 @@ export default function Profile({ user, onLogout, onUserUpdate }) {
     form.append("file", file);
 
     try {
-      const res = await fetch("/auth/avatar", { method: "POST", body: form });
+      const res = await fetch("/auth/avatar", { method: "POST", credentials: "include", body: form });
       const data = await res.json();
       if (!res.ok) {
         setAvatarError(data.error || "Upload failed.");

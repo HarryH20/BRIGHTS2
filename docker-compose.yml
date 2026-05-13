@@ -66,8 +66,7 @@ services:
     #   db:
     #     condition: service_healthy
 
-  # Local PostgreSQL (optional - only needed if not using Supabase)
-  # Uncomment if you want to use local database instead
+  # Local PostgreSQL (for offline development — uncomment and switch DATABASE_URL in .env to use)
   # db:
   #   image: postgres:16-alpine
   #   environment:
@@ -88,4 +87,4 @@ services:
 
 volumes:
   backend_logs:
-# postgres_data:
+  postgres_data:

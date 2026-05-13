@@ -94,10 +94,14 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(survey_bp)
 app.register_blueprint(admin_survey_bp)
 
-# Create tables
+# Create tables — primary creation happens in gunicorn.conf.py on_starting hook
+# This try/except handles direct `python app.py` runs and is a safety net
 with app.app_context():
-    db.create_all()
-    logger.info("Database tables verified/created")
+    try:
+        db.create_all()
+        logger.info("Database tables verified/created")
+    except Exception as _e:
+        logger.warning("db.create_all() skipped (tables likely already exist): %s", _e)
 
 
 # =============================================================================

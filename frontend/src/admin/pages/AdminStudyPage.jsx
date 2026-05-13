@@ -110,7 +110,7 @@ function RoundsSection({ studyId }) {
 
   async function handleTransition(roundId, newStatus) {
     try {
-      const res = await fetch(`/api/admin/rounds/${roundId}`, {
+      const res = await fetch(`/api/admin/rounds/${roundId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
