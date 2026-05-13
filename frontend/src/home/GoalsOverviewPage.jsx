@@ -6,12 +6,17 @@ import SkeletonGoalCard from "../components/SkeletonGoalCard.jsx";
 
 const TP_ORDER = ["T6", "T5", "T4", "T3", "T2"];
 
-export default function GoalsOverviewPage({ user, onLogout }) {
-  const [goals, setGoals] = useState([]);
-  const [radarFigures, setRadarFigures] = useState({});
-  const [goalsLoaded, setGoalsLoaded] = useState(false);
+export default function GoalsOverviewPage({ user, onLogout, chartCache, setChartCache }) {
+  // Use full cache (from Dashboard) or partial goals-only cache — never mark loaded=true ourselves
+  // so Dashboard's roseplot check isn't poisoned if user visits this page first
+  const cacheHit = !!(chartCache?.loaded || chartCache?.goalsReady);
+  const [goals, setGoals] = useState(cacheHit ? chartCache.goals : []);
+  const [radarFigures, setRadarFigures] = useState(cacheHit ? chartCache.radarFigures : {});
+  const [goalsLoaded, setGoalsLoaded] = useState(cacheHit);
 
   useEffect(() => {
+    if (cacheHit) return;
+
     fetch("/api/visualizations/goals", { credentials: "include" })
       .then(r => r.ok ? r.json() : Promise.reject(r))
       .then(d => {
@@ -19,7 +24,10 @@ export default function GoalsOverviewPage({ user, onLogout }) {
         setGoals(fetchedGoals);
         setGoalsLoaded(true);
 
-        if (!fetchedGoals.length) return;
+        if (!fetchedGoals.length) {
+          setChartCache?.(prev => ({ ...(prev || {}), goals: [], goalsReady: true }));
+          return;
+        }
 
         Promise.allSettled(
           fetchedGoals.map((_, idx) =>
@@ -33,10 +41,11 @@ export default function GoalsOverviewPage({ user, onLogout }) {
             if (r.status === "fulfilled") radars[r.value.idx] = r.value.fig;
           });
           setRadarFigures(radars);
+          setChartCache?.(prev => ({ ...(prev || {}), goals: fetchedGoals, radarFigures: radars, goalsReady: true }));
         });
       })
       .catch(() => setGoalsLoaded(true));
-  }, []);
+  }, []); // eslint-disable-line
 
   const colSpan = goals.length <= 1 ? 12 : goals.length === 2 ? 6 : 4;
 

@@ -181,7 +181,7 @@ export default function App() {
           path="/goals"
           element={
             <RequireAuth user={user} checking={checking}>
-              <GoalsOverviewPage user={user} onLogout={handleLogout} />
+              <GoalsOverviewPage user={user} onLogout={handleLogout} chartCache={chartCache} setChartCache={setChartCache} />
             </RequireAuth>
           }
         />

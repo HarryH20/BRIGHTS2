@@ -124,15 +124,16 @@ export default function AdminOverviewPage({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
     setRoseError(null);
-    setFigure(null);
+    const controller = new AbortController();
     const qs = new URLSearchParams({ user_id: userId, goal_id: goal, weeks }).toString();
-    fetch(`/api/admin/roseplot?${qs}`, { credentials: "include" })
-      .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
-      .then((fig) => { if (!cancelled) setFigure(fig); })
-      .catch((e) => { if (!cancelled) setRoseError(e.message); });
-    return () => { cancelled = true; };
+    const timer = setTimeout(() => {
+      fetch(`/api/admin/roseplot?${qs}`, { credentials: "include", signal: controller.signal })
+        .then((r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
+        .then((fig) => setFigure(fig))
+        .catch((e) => { if (e.name !== "AbortError") setRoseError(e.message); });
+    }, 300);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [userId, goal, weeks]);
 
   // ── Status pill ──

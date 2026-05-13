@@ -22,7 +22,7 @@ function availableUntilDate() {
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
 }
 
-export default function SurveyHeroCard({ status, timepoint, nextUnlocksAt, onStartSurvey }) {
+export default function SurveyHeroCard({ status, timepoint, nextUnlocksAt, onStartSurvey, onViewResults }) {
   if (status === "due") {
     return (
       <div style={s.dueCard}>
@@ -67,7 +67,7 @@ export default function SurveyHeroCard({ status, timepoint, nextUnlocksAt, onSta
         <div style={s.completeSub}>
           Thank you for your participation in this research study.
         </div>
-        <button type="button" style={s.downloadBtn}>Download your summary →</button>
+        <button type="button" style={s.downloadBtn} onClick={onViewResults}>View your results →</button>
       </div>
     );
   }

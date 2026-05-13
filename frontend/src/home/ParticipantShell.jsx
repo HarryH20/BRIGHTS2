@@ -68,7 +68,7 @@ export default function ParticipantShell({ user, onLogout, children, title }) {
 
           {/* Right actions */}
           <div style={s.actions}>
-            {user?.role === "admin" && (
+            {(user?.role === "admin" || user?.is_researcher) && (
               <Link to="/admin" style={s.adminLink}>
                 <Shield size={14} />
                 <span>Admin Panel</span>

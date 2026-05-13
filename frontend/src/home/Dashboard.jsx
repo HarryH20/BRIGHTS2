@@ -89,6 +89,7 @@ function DashboardContent({
             timepoint={surveyTimepoint}
             nextUnlocksAt={surveyInfo?.next_unlocks_at ?? surveyInfo?.unlocks_at}
             onStartSurvey={() => navigate("/survey")}
+            onViewResults={() => navigate("/overview")}
           />
         </div>
       )}
@@ -125,11 +126,16 @@ function DashboardContent({
         )}
 
         {goalsLoaded && goals.length > 0 && (
-          <div style={styles.goalsGrid}>
-            {goals.map((g, idx) => (
-              <GoalCard key={g.goal_id} goal={g} idx={idx} radarFigure={radarFigures[idx]} colSpan={colSpan} />
-            ))}
-          </div>
+          <>
+            <div style={styles.goalsGrid}>
+              {goals.map((g, idx) => (
+                <GoalCard key={g.goal_id} goal={g} idx={idx} radarFigure={radarFigures[idx]} colSpan={colSpan} />
+              ))}
+            </div>
+            {!ready && (
+              <div style={styles.loadingHint}>{loadingStatus}</div>
+            )}
+          </>
         )}
       </div>
 
@@ -173,16 +179,16 @@ function DashboardContent({
 export default function Dashboard({ user, onLogout, chartCache, setChartCache }) {
   const navigate = useNavigate();
   const [goalFilter, setGoalFilter] = useState("all");
-  const [weekFilter, setWeekFilter] = useState("2-6");
+  const [weekFilter, setWeekFilter] = useState("all");
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Initialize from cache if available — avoids re-fetching on navigation
-  const [goals, setGoals] = useState(chartCache?.loaded ? chartCache.goals : []);
+  // Initialize from cache — full cache (loaded) skips everything; partial (goalsReady) pre-fills goals+radars
+  const [goals, setGoals] = useState(chartCache?.loaded || chartCache?.goalsReady ? chartCache.goals : []);
   const [roseFigure, setRoseFigure] = useState(chartCache?.loaded ? chartCache.roseFigure : null);
   const [filteredRoseFigure, setFilteredRoseFigure] = useState(chartCache?.loaded ? chartCache.roseFigure : null);
-  const [radarFigures, setRadarFigures] = useState(chartCache?.loaded ? chartCache.radarFigures : {});
+  const [radarFigures, setRadarFigures] = useState(chartCache?.loaded || chartCache?.goalsReady ? chartCache.radarFigures : {});
   const [ready, setReady] = useState(chartCache?.loaded ?? false);
-  const [goalsLoaded, setGoalsLoaded] = useState(chartCache?.loaded ?? false);
+  const [goalsLoaded, setGoalsLoaded] = useState(!!(chartCache?.loaded || chartCache?.goalsReady));
   const [loadingStatus, setLoadingStatus] = useState("Loading your goals...");
   const [surveyCompletion, setSurveyCompletion] = useState(null);
 
@@ -194,10 +200,24 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
   }, []);
 
   useEffect(() => {
-    // Skip fetch if data is already cached
     if (chartCache?.loaded) return;
 
-    // Step 1: fetch goals + roseplot in parallel
+    if (chartCache?.goalsReady) {
+      // Goals+radars already cached by GoalsOverviewPage — only need roseplot
+      setLoadingStatus("Loading overview chart...");
+      fetch("/api/visualizations/roseplot", { credentials: "include" })
+        .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+        .then((rose) => {
+          setRoseFigure(rose);
+          setFilteredRoseFigure(rose);
+          setChartCache?.((prev) => ({ ...(prev || {}), roseFigure: rose, loaded: true }));
+          setReady(true);
+        })
+        .catch(() => setReady(true));
+      return;
+    }
+
+    // Full fetch: goals + roseplot in parallel, then radars
     Promise.allSettled([
       fetch("/api/visualizations/goals", { credentials: "include" }).then((r) =>
         r.ok ? r.json() : Promise.reject(r)
@@ -221,7 +241,6 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
         return;
       }
 
-      // Step 2: fetch a radarplot for each goal
       setLoadingStatus("Preparing your charts...");
       Promise.allSettled(
         fetchedGoals.map((_, idx) =>
@@ -241,17 +260,36 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
     });
   }, []); // eslint-disable-line
 
-  // Refetch roseplot whenever filters change (after initial load)
+  // Refetch roseplot whenever filters change (debounced, with abort)
   useEffect(() => {
     if (!ready) return;
+
+    // Both at default — reuse the already-fetched figure, no network call
+    if (goalFilter === "all" && weekFilter === "all") {
+      setFilteredRoseFigure(roseFigure);
+      return;
+    }
+
+    const controller = new AbortController();
     const params = new URLSearchParams();
     if (goalFilter !== "all") params.set("goal_id", goalFilter);
     if (weekFilter !== "all") params.set("weeks", weekFilter);
-    fetch(`/api/visualizations/roseplot?${params.toString()}`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
-      .then((fig) => setFilteredRoseFigure(fig))
-      .catch(() => {});
-  }, [goalFilter, weekFilter, ready]); // eslint-disable-line
+
+    const timer = setTimeout(() => {
+      fetch(`/api/visualizations/roseplot?${params.toString()}`, {
+        credentials: "include",
+        signal: controller.signal,
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+        .then((fig) => setFilteredRoseFigure(fig))
+        .catch(() => {});
+    }, 300);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [goalFilter, weekFilter, ready, roseFigure]); // eslint-disable-line
 
   const displayName = user?.display_name || user?.username || "there";
 
@@ -371,6 +409,13 @@ const styles = {
     border: "1px solid var(--shell-border)",
     background: "#0b1220",
     padding: 12,
+  },
+  loadingHint: {
+    fontSize: 12,
+    color: "var(--shell-text-muted)",
+    marginTop: 10,
+    textAlign: "center",
+    opacity: 0.7,
   },
   insight: {
     fontSize: 13,

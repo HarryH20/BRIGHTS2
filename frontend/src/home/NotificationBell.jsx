@@ -41,11 +41,10 @@ export default function NotificationBell({ userId }) {
       };
       es.onerror = () => {
         es.close();
-        // Fallback: poll every 60s
-        pollRef.current = setInterval(fetchNotifications, 60000);
+        pollRef.current = setInterval(fetchNotifications, 30000);
       };
     } catch (_) {
-      pollRef.current = setInterval(fetchNotifications, 60000);
+      pollRef.current = setInterval(fetchNotifications, 30000);
     }
 
     return () => {
