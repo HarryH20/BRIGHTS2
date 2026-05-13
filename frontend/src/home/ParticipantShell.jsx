@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -10,7 +10,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import NotificationBell from "./NotificationBell.jsx";
-import { SurveyContext } from "./SurveyContext.jsx";
+import { useSurveyInfo } from "./SurveyContext.jsx";
 
 const NAV = [
   { to: "/dashboard", label: "Home",     icon: LayoutDashboard },
@@ -26,14 +26,7 @@ function isActive(pathname, to) {
 export default function ParticipantShell({ user, onLogout, children, title }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const [surveyInfo, setSurveyInfo] = useState(null);
-
-  useEffect(() => {
-    fetch("/api/survey/next", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => setSurveyInfo(d))
-      .catch(() => {});
-  }, []);
+  const surveyInfo = useSurveyInfo();
 
   const displayName = user?.display_name || user?.username || "";
   const truncName = displayName.length > 12 ? displayName.slice(0, 12) + "…" : displayName;
@@ -92,9 +85,7 @@ export default function ParticipantShell({ user, onLogout, children, title }) {
 
       {/* ── Main content ── */}
       <main style={s.main} className="participant-main">
-        <SurveyContext.Provider value={surveyInfo}>
-          {children}
-        </SurveyContext.Provider>
+        {children}
       </main>
 
       {/* ── Participant ID watermark ── */}

@@ -13,6 +13,7 @@ import OverviewPage from "./home/OverviewPage.jsx";
 import SurveyForm from "./home/SurveyForm.jsx";
 import SurveyWeekPage from "./home/SurveyWeekPage.jsx";
 import AppErrorBoundary from "./components/ErrorBoundary.jsx";
+import { SurveyContext } from "./home/SurveyContext.jsx";
 
 import AdminOverviewPage from "./admin/pages/AdminOverviewPage.jsx";
 import AdminParticipantsPage from "./admin/pages/AdminParticipantsPage.jsx";
@@ -64,6 +65,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   const [chartCache, setChartCache] = useState(EMPTY_CHART_CACHE);
+  const [surveyInfo, setSurveyInfo] = useState(null);
   const navigate = useNavigate();
 
   function clearChartCache() {
@@ -82,6 +84,15 @@ export default function App() {
     })();
   }, []);
 
+  // Fetch survey status once after auth check — ParticipantShell reads from context
+  useEffect(() => {
+    if (!user || user.role === "admin" || user.is_researcher) return;
+    fetch("/api/survey/next", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setSurveyInfo(d))
+      .catch(() => {});
+  }, [user?.id]); // eslint-disable-line
+
   function handleUserUpdate(updates) {
     setUser((prev) => ({ ...prev, ...updates }));
   }
@@ -98,6 +109,7 @@ export default function App() {
 
   return (
     <AppErrorBoundary context="page">
+      <SurveyContext.Provider value={surveyInfo}>
       <Routes>
         <Route
           path="/login"
@@ -251,6 +263,7 @@ export default function App() {
           }
         />
       </Routes>
+      </SurveyContext.Provider>
     </AppErrorBoundary>
   );
 }

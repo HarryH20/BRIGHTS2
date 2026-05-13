@@ -24,7 +24,7 @@ function greeting(name) {
 function DashboardContent({
   displayName, goals, radarFigures, goalsLoaded, filteredRoseFigure, roseFigure,
   goalFilter, setGoalFilter, weekFilter, setWeekFilter, surveyCompletion, navigate,
-  setShowOnboarding,
+  setShowOnboarding, ready, loadingStatus,
 }) {
   const surveyInfo = useSurveyInfo();
   const surveyStatus = surveyInfo?.status ?? null;
@@ -313,6 +313,8 @@ export default function Dashboard({ user, onLogout, chartCache, setChartCache })
           surveyCompletion={surveyCompletion}
           navigate={navigate}
           setShowOnboarding={setShowOnboarding}
+          ready={ready}
+          loadingStatus={loadingStatus}
         />
       </ParticipantShell>
     </>
